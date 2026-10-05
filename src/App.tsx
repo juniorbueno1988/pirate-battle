@@ -1,68 +1,65 @@
-import { useEffect, useRef, useState } from 'react'
-import { Application, Graphics, Text } from 'pixi.js'
+import { useEffect, useRef, useState } from "react";
+import { Application, Graphics, Text } from "pixi.js";
+import { Ranking } from "./components/Ranking";
+import { submitScore } from "./api/ranking";
 
 type MatchResult = {
-  id: string
-  score: number
-  duration: number
-  reason: string
-  createdAt: string
-}
+  id: string;
+  score: number;
+  duration: number;
+  reason: string;
+  createdAt: string;
+};
 
-const HISTORY_KEY = 'pirate-battle-history'
+const HISTORY_KEY = "pirate-battle-history";
 
 function saveMatchResult(result: MatchResult) {
   try {
-    const stored = localStorage.getItem(HISTORY_KEY)
+    const stored = localStorage.getItem(HISTORY_KEY);
 
-    const history: MatchResult[] = stored
-      ? JSON.parse(stored)
-      : []
+    const history: MatchResult[] = stored ? JSON.parse(stored) : [];
 
-    history.unshift(result)
+    history.unshift(result);
 
-    localStorage.setItem(
-      HISTORY_KEY,
-      JSON.stringify(history.slice(0, 20)),
-    )
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 20)));
 
-    console.log('Resultado salvo:', result)
+    console.log("Resultado salvo:", result);
   } catch (error) {
-    console.error('Erro ao salvar resultado:', error)
+    console.error("Erro ao salvar resultado:", error);
   }
 }
 
 function getMatchHistory(): MatchResult[] {
   try {
-    const stored = localStorage.getItem(HISTORY_KEY)
+    const stored = localStorage.getItem(HISTORY_KEY);
 
     if (!stored) {
-      return []
+      return [];
     }
 
-    return JSON.parse(stored)
+    return JSON.parse(stored);
   } catch (error) {
-    console.error('Erro ao carregar histórico:', error)
-    return []
+    console.error("Erro ao carregar histórico:", error);
+    return [];
   }
 }
 
 function App() {
-  const gameContainerRef = useRef<HTMLDivElement | null>(null)
+  const gameContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const [showMenu, setShowMenu] = useState(true)
-  const [showHistory, setShowHistory] = useState(false)
-  const [history, setHistory] = useState<MatchResult[]>([])
+  const [showMenu, setShowMenu] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<MatchResult[]>([]);
 
   useEffect(() => {
     if (!gameContainerRef.current) {
-      return
+      return;
     }
 
-    const container = gameContainerRef.current
-    const pixiApp = new Application()
+    const container = gameContainerRef.current;
+    const pixiApp = new Application();
 
-    let destroyed = false
+    let destroyed = false;
 
     const initializeGame = async () => {
       await pixiApp.init({
@@ -70,234 +67,211 @@ function App() {
         height: 600,
         backgroundColor: 0x0b1726,
         antialias: true,
-      })
+      });
 
       if (destroyed) {
-        pixiApp.destroy(true)
-        return
+        pixiApp.destroy(true);
+        return;
       }
 
-      container.appendChild(pixiApp.canvas)
+      container.appendChild(pixiApp.canvas);
 
-      /*
-       * =========================
-       * ESTADO DO JOGO
-       * =========================
-       */
+      // =========================
+      // ESTADO DO JOGO
+      // =========================
 
-      let health = 100
-      let score = 0
-      let timeRemaining = 60
+      let health = 100;
+      let score = 0;
+      let timeRemaining = 60;
+      let paused = true;
+      let gameOver = false;
+      let gameTimer = 0;
 
-      let paused = true
-      let gameOver = false
-
-      let gameTimer = 0
-      let shooterTimer = 0
-
-      /*
-       * =========================
-       * HUD
-       * =========================
-       */
+      // =========================
+      // HUD
+      // =========================
 
       const healthText = new Text({
-        text: 'Vida: 100',
+        text: "Vida: 100",
         style: {
           fill: 0xffffff,
           fontSize: 20,
         },
-      })
+      });
 
-      healthText.x = 20
-      healthText.y = 20
+      healthText.x = 20;
+      healthText.y = 20;
 
       const scoreText = new Text({
-        text: 'Pontos: 0',
+        text: "Pontos: 0",
         style: {
           fill: 0xffffff,
           fontSize: 20,
         },
-      })
+      });
 
-      scoreText.x = 20
-      scoreText.y = 50
+      scoreText.x = 20;
+      scoreText.y = 50;
 
       const timerText = new Text({
-        text: 'Tempo: 60',
+        text: "Tempo: 60",
         style: {
           fill: 0xffffff,
           fontSize: 20,
         },
-      })
+      });
 
-      timerText.x = 20
-      timerText.y = 80
+      timerText.x = 20;
+      timerText.y = 80;
 
-      pixiApp.stage.addChild(
-        healthText,
-        scoreText,
-        timerText,
-      )
+      pixiApp.stage.addChild(healthText, scoreText, timerText);
 
-      /*
-       * =========================
-       * PAUSE
-       * =========================
-       */
+      // =========================
+      // PAUSE
+      // =========================
 
       const pauseText = new Text({
-        text: 'PAUSADO',
+        text: "PAUSADO",
         style: {
           fill: 0xffffff,
           fontSize: 48,
-          fontWeight: 'bold',
+          fontWeight: "bold",
         },
-      })
+      });
 
-      pauseText.anchor.set(0.5)
-      pauseText.x = 400
-      pauseText.y = 300
-      pauseText.visible = true
+      pauseText.anchor.set(0.5);
+      pauseText.x = 400;
+      pauseText.y = 300;
+      pauseText.visible = true;
 
-      pixiApp.stage.addChild(pauseText)
+      pixiApp.stage.addChild(pauseText);
 
-      /*
-       * =========================
-       * GAME OVER
-       * =========================
-       */
+      // =========================
+      // GAME OVER
+      // =========================
 
-      const gameOverBackground = new Graphics()
+      const gameOverBackground = new Graphics();
 
-      gameOverBackground
-        .rect(150, 110, 500, 390)
-        .fill({
-          color: 0x000000,
-          alpha: 0.9,
-        })
+      gameOverBackground.rect(150, 110, 500, 390).fill({
+        color: 0x000000,
+        alpha: 0.9,
+      });
 
-      gameOverBackground.visible = false
+      gameOverBackground.visible = false;
 
-      pixiApp.stage.addChild(gameOverBackground)
+      pixiApp.stage.addChild(gameOverBackground);
 
       const gameOverTitle = new Text({
-        text: 'FIM DE JOGO',
+        text: "FIM DE JOGO",
         style: {
           fill: 0xffffff,
           fontSize: 42,
-          fontWeight: 'bold',
+          fontWeight: "bold",
         },
-      })
+      });
 
-      gameOverTitle.anchor.set(0.5)
-      gameOverTitle.x = 400
-      gameOverTitle.y = 170
-      gameOverTitle.visible = false
+      gameOverTitle.anchor.set(0.5);
+      gameOverTitle.x = 400;
+      gameOverTitle.y = 170;
+      gameOverTitle.visible = false;
 
-      pixiApp.stage.addChild(gameOverTitle)
+      pixiApp.stage.addChild(gameOverTitle);
 
       const finalScoreText = new Text({
-        text: 'Pontuação: 0',
+        text: "Pontuação: 0",
         style: {
           fill: 0xffffff,
           fontSize: 26,
         },
-      })
+      });
 
-      finalScoreText.anchor.set(0.5)
-      finalScoreText.x = 400
-      finalScoreText.y = 230
-      finalScoreText.visible = false
+      finalScoreText.anchor.set(0.5);
+      finalScoreText.x = 400;
+      finalScoreText.y = 230;
+      finalScoreText.visible = false;
 
-      pixiApp.stage.addChild(finalScoreText)
+      pixiApp.stage.addChild(finalScoreText);
 
       const gameOverReasonText = new Text({
-        text: '',
+        text: "",
         style: {
           fill: 0xffffff,
           fontSize: 20,
         },
-      })
+      });
 
-      gameOverReasonText.anchor.set(0.5)
-      gameOverReasonText.x = 400
-      gameOverReasonText.y = 270
-      gameOverReasonText.visible = false
+      gameOverReasonText.anchor.set(0.5);
+      gameOverReasonText.x = 400;
+      gameOverReasonText.y = 270;
+      gameOverReasonText.visible = false;
 
-      pixiApp.stage.addChild(gameOverReasonText)
+      pixiApp.stage.addChild(gameOverReasonText);
 
-      /*
-       * BOTÃO JOGAR NOVAMENTE
-       */
+      // =========================
+      // BOTÃO JOGAR NOVAMENTE
+      // =========================
 
-      const restartButton = new Graphics()
+      const restartButton = new Graphics();
 
-      restartButton
-        .roundRect(270, 320, 260, 60, 10)
-        .fill(0x1976d2)
+      restartButton.roundRect(270, 320, 260, 60, 10).fill(0x1976d2);
 
-      restartButton.eventMode = 'static'
-      restartButton.cursor = 'pointer'
-      restartButton.visible = false
+      restartButton.eventMode = "static";
+      restartButton.cursor = "pointer";
+      restartButton.visible = false;
 
-      pixiApp.stage.addChild(restartButton)
+      pixiApp.stage.addChild(restartButton);
 
       const restartText = new Text({
-        text: 'JOGAR NOVAMENTE',
+        text: "JOGAR NOVAMENTE",
         style: {
           fill: 0xffffff,
           fontSize: 20,
-          fontWeight: 'bold',
+          fontWeight: "bold",
         },
-      })
+      });
 
-      restartText.anchor.set(0.5)
-      restartText.x = 400
-      restartText.y = 350
-      restartText.visible = false
+      restartText.anchor.set(0.5);
+      restartText.x = 400;
+      restartText.y = 350;
+      restartText.visible = false;
 
-      pixiApp.stage.addChild(restartText)
+      pixiApp.stage.addChild(restartText);
 
-      /*
-       * BOTÃO VOLTAR AO MENU
-       */
+      // =========================
+      // BOTÃO VOLTAR AO MENU
+      // =========================
 
-      const menuButton = new Graphics()
+      const menuButton = new Graphics();
 
-      menuButton
-        .roundRect(270, 400, 260, 60, 10)
-        .fill(0x455a64)
+      menuButton.roundRect(270, 400, 260, 60, 10).fill(0x455a64);
 
-      menuButton.eventMode = 'static'
-      menuButton.cursor = 'pointer'
-      menuButton.visible = false
+      menuButton.eventMode = "static";
+      menuButton.cursor = "pointer";
+      menuButton.visible = false;
 
-      pixiApp.stage.addChild(menuButton)
+      pixiApp.stage.addChild(menuButton);
 
       const menuText = new Text({
-        text: 'VOLTAR AO MENU',
+        text: "VOLTAR AO MENU",
         style: {
           fill: 0xffffff,
           fontSize: 20,
-          fontWeight: 'bold',
+          fontWeight: "bold",
         },
-      })
+      });
 
-      menuText.anchor.set(0.5)
-      menuText.x = 400
-      menuText.y = 430
-      menuText.visible = false
+      menuText.anchor.set(0.5);
+      menuText.x = 400;
+      menuText.y = 430;
+      menuText.visible = false;
 
-      pixiApp.stage.addChild(menuText)
+      pixiApp.stage.addChild(menuText);
 
-      /*
-       * =========================
-       * PLAYER
-       * =========================
-       */
+      // =========================
+      // PLAYER
+      // =========================
 
-      const player = new Graphics()
+      const player = new Graphics();
 
       player
         .moveTo(0, -20)
@@ -305,58 +279,47 @@ function App() {
         .lineTo(0, 12)
         .lineTo(-15, 20)
         .closePath()
-        .fill(0x00aaff)
+        .fill(0x00aaff);
 
-      player.x = 400
-      player.y = 500
+      player.x = 400;
+      player.y = 500;
 
-      pixiApp.stage.addChild(player)
+      pixiApp.stage.addChild(player);
 
-      /*
-       * =========================
-       * ILHAS
-       * =========================
-       */
+      // =========================
+      // ILHAS
+      // =========================
 
-      const islands: Graphics[] = []
+      const islands: Graphics[] = [];
 
-      function createIsland(
-        x: number,
-        y: number,
-        radius: number,
-      ) {
-        const island = new Graphics()
+      function createIsland(x: number, y: number, radius: number) {
+        const island = new Graphics();
 
-        island
-          .circle(0, 0, radius)
-          .fill(0x4f6f3f)
+        island.circle(0, 0, radius).fill(0x4f6f3f);
 
-        island.x = x
-        island.y = y
+        island.x = x;
+        island.y = y;
 
-        pixiApp.stage.addChild(island)
-
-        islands.push(island)
+        pixiApp.stage.addChild(island);
+        islands.push(island);
       }
 
-      createIsland(400, 350, 55)
-      createIsland(200, 180, 45)
-      createIsland(620, 200, 50)
+      createIsland(400, 350, 55);
+      createIsland(200, 180, 45);
+      createIsland(620, 200, 50);
 
-      /*
-       * =========================
-       * PROJÉTEIS
-       * =========================
-       */
+      // =========================
+      // PROJÉTEIS
+      // =========================
 
       type Projectile = {
-        graphic: Graphics
-        vx: number
-        vy: number
-        enemy: boolean
-      }
+        graphic: Graphics;
+        vx: number;
+        vy: number;
+        enemy: boolean;
+      };
 
-      const projectiles: Projectile[] = []
+      const projectiles: Projectile[] = [];
 
       function createProjectile(
         x: number,
@@ -364,555 +327,388 @@ function App() {
         angle: number,
         enemy = false,
       ) {
-        const projectile = new Graphics()
+        const projectile = new Graphics();
 
         projectile
           .circle(0, 0, enemy ? 5 : 4)
-          .fill(enemy ? 0xff8800 : 0x00ffff)
+          .fill(enemy ? 0xff8800 : 0x00ffff);
 
-        projectile.x = x
-        projectile.y = y
+        projectile.x = x;
+        projectile.y = y;
 
-        const speed = enemy ? 4 : 7
+        const speed = enemy ? 4 : 7;
 
         projectiles.push({
           graphic: projectile,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
           enemy,
-        })
+        });
 
-        pixiApp.stage.addChild(projectile)
+        pixiApp.stage.addChild(projectile);
       }
 
-      /*
-       * =========================
-       * INIMIGOS
-       * =========================
-       */
+      // =========================
+      // INIMIGOS
+      // =========================
 
       type Enemy = {
-        graphic: Graphics
-        type: 'chaser' | 'shooter'
-        speed: number
-        shootTimer: number
-      }
+        graphic: Graphics;
+        type: "chaser" | "shooter";
+        speed: number;
+        shootTimer: number;
+      };
 
-      const enemies: Enemy[] = []
+      const enemies: Enemy[] = [];
 
       function createChaser() {
-        const enemyGraphic = new Graphics()
+        const enemyGraphic = new Graphics();
 
-        enemyGraphic
-          .circle(0, 0, 18)
-          .fill(0xff3333)
+        enemyGraphic.circle(0, 0, 18).fill(0xff3333);
 
-        enemyGraphic.x = Math.random() * 700 + 50
-        enemyGraphic.y = Math.random() * 300 + 50
+        enemyGraphic.x = Math.random() * 700 + 50;
+
+        enemyGraphic.y = Math.random() * 300 + 50;
 
         enemies.push({
           graphic: enemyGraphic,
-          type: 'chaser',
+          type: "chaser",
           speed: 1.2,
           shootTimer: 0,
-        })
+        });
 
-        pixiApp.stage.addChild(enemyGraphic)
+        pixiApp.stage.addChild(enemyGraphic);
       }
 
       function createShooter() {
-        const enemyGraphic = new Graphics()
+        const enemyGraphic = new Graphics();
 
-        enemyGraphic
-          .circle(0, 0, 18)
-          .fill(0xff8800)
+        enemyGraphic.circle(0, 0, 18).fill(0xff8800);
 
-        enemyGraphic.x = Math.random() * 700 + 50
-        enemyGraphic.y = Math.random() * 300 + 50
+        enemyGraphic.x = Math.random() * 700 + 50;
+
+        enemyGraphic.y = Math.random() * 300 + 50;
 
         enemies.push({
           graphic: enemyGraphic,
-          type: 'shooter',
+          type: "shooter",
           speed: 0.5,
           shootTimer: 0,
-        })
+        });
 
-        pixiApp.stage.addChild(enemyGraphic)
+        pixiApp.stage.addChild(enemyGraphic);
       }
 
-      createChaser()
-      createChaser()
-      createShooter()
+      createChaser();
+      createChaser();
+      createShooter();
 
-      /*
-       * =========================
-       * CONTROLES
-       * =========================
-       */
+      // =========================
+      // CONTROLES
+      // =========================
 
-      const keys: Record<string, boolean> = {}
+      const keys: Record<string, boolean> = {};
 
-      const handleKeyDown = (
-        event: KeyboardEvent,
-      ) => {
-        keys[event.key.toLowerCase()] = true
+      const handleKeyDown = (event: KeyboardEvent) => {
+        keys[event.key.toLowerCase()] = true;
 
-        if (event.key.toLowerCase() === 'p') {
+        if (event.key.toLowerCase() === "p") {
           if (!gameOver) {
-            paused = !paused
-            pauseText.visible = paused
+            paused = !paused;
+            pauseText.visible = paused;
           }
         }
 
-        if (event.key === ' ') {
-          event.preventDefault()
+        if (event.key === " ") {
+          event.preventDefault();
         }
-      }
+      };
 
-      const handleKeyUp = (
-        event: KeyboardEvent,
-      ) => {
-        keys[event.key.toLowerCase()] = false
-      }
+      const handleKeyUp = (event: KeyboardEvent) => {
+        keys[event.key.toLowerCase()] = false;
+      };
 
       const handleBlur = () => {
         if (!gameOver) {
-          paused = true
-          pauseText.visible = true
+          paused = true;
+          pauseText.visible = true;
         }
+      };
+
+      window.addEventListener("keydown", handleKeyDown);
+
+      window.addEventListener("keyup", handleKeyUp);
+
+      window.addEventListener("blur", handleBlur);
+
+      // =========================
+      // COLISÃO
+      // =========================
+
+      function distance(x1: number, y1: number, x2: number, y2: number) {
+        const dx = x1 - x2;
+        const dy = y1 - y2;
+
+        return Math.sqrt(dx * dx + dy * dy);
       }
 
-      window.addEventListener(
-        'keydown',
-        handleKeyDown,
-      )
-
-      window.addEventListener(
-        'keyup',
-        handleKeyUp,
-      )
-
-      window.addEventListener(
-        'blur',
-        handleBlur,
-      )
-
-      /*
-       * =========================
-       * COLISÃO
-       * =========================
-       */
-
-      function distance(
-        x1: number,
-        y1: number,
-        x2: number,
-        y2: number,
-      ) {
-        const dx = x1 - x2
-        const dy = y1 - y2
-
-        return Math.sqrt(
-          dx * dx + dy * dy,
-        )
-      }
-
-      function collidesWithIsland(
-        x: number,
-        y: number,
-        radius: number,
-      ) {
+      function collidesWithIsland(x: number, y: number, radius: number) {
         return islands.some((island) => {
-          return (
-            distance(
-              x,
-              y,
-              island.x,
-              island.y,
-            ) <
-            radius + island.width / 2
-          )
-        })
+          return distance(x, y, island.x, island.y) < radius + island.width / 2;
+        });
       }
 
-      /*
-       * =========================
-       * GAME OVER
-       * =========================
-       */
+      // =========================
+      // GAME OVER
+      // =========================
 
-      function finishGame(
-        reason: string,
-      ) {
+      function finishGame(reason: string) {
         if (gameOver) {
-          return
+          return;
         }
 
-        gameOver = true
-        paused = false
+        gameOver = true;
+        paused = false;
 
-        const duration =
-          60 - timeRemaining
+        const duration = 60 - timeRemaining;
 
-        finalScoreText.text =
-          `Pontuação: ${score}`
+        finalScoreText.text = `Pontuação: ${score}`;
 
-        gameOverReasonText.text =
-          reason
+        gameOverReasonText.text = reason;
 
-        gameOverBackground.visible = true
-        gameOverTitle.visible = true
-        finalScoreText.visible = true
-        gameOverReasonText.visible = true
+        gameOverBackground.visible = true;
+        gameOverTitle.visible = true;
+        finalScoreText.visible = true;
+        gameOverReasonText.visible = true;
 
-        restartButton.visible = true
-        restartText.visible = true
+        restartButton.visible = true;
+        restartText.visible = true;
 
-        menuButton.visible = true
-        menuText.visible = true
-
-        /*
-         * Salva resultado.
-         */
+        menuButton.visible = true;
+        menuText.visible = true;
 
         const result: MatchResult = {
           id: Date.now().toString(),
           score,
           duration,
           reason,
-          createdAt:
-            new Date().toISOString(),
-        }
+          createdAt: new Date().toISOString(),
+        };
 
-        saveMatchResult(result)
-
-        setHistory(getMatchHistory())
+        saveMatchResult(result);
+        setHistory(getMatchHistory());
+        submitScore("Captain Bueno", score).catch((error) => {
+          console.error("Erro ao enviar pontuação para o ranking:", error);
+        });
       }
 
-      /*
-       * =========================
-       * VOLTAR AO MENU
-       * =========================
-       */
-
-      function returnToMenu() {
-        gameOver = true
-        paused = true
-
-        /*
-         * Remove projéteis.
-         */
-
-        for (const projectile of projectiles) {
-          projectile.graphic.destroy()
-        }
-
-        projectiles.length = 0
-
-        /*
-         * Remove inimigos.
-         */
-
-        for (const enemy of enemies) {
-          enemy.graphic.destroy()
-        }
-
-        enemies.length = 0
-
-        /*
-         * Esconde a tela de game over.
-         */
-
-        gameOverBackground.visible = false
-        gameOverTitle.visible = false
-        finalScoreText.visible = false
-        gameOverReasonText.visible = false
-
-        restartButton.visible = false
-        restartText.visible = false
-
-        menuButton.visible = false
-        menuText.visible = false
-
-        pauseText.visible = true
-
-        /*
-         * Mostra o menu React.
-         */
-
-        setShowMenu(true)
-      }
-
-      /*
-       * =========================
-       * RESET
-       * =========================
-       */
+      // =========================
+      // RESET
+      // =========================
 
       function resetGame() {
-        health = 100
-        score = 0
-        timeRemaining = 60
+        health = 100;
+        score = 0;
+        timeRemaining = 60;
+        gameTimer = 0;
+        gameOver = false;
+        paused = false;
 
-        gameTimer = 0
-        shooterTimer = 0
+        player.x = 400;
+        player.y = 500;
+        player.rotation = 0;
 
-        gameOver = false
-        paused = false
+        healthText.text = "Vida: 100";
+        scoreText.text = "Pontos: 0";
+        timerText.text = "Tempo: 60";
 
-        player.x = 400
-        player.y = 500
-        player.rotation = 0
+        pauseText.visible = false;
 
-        healthText.text = 'Vida: 100'
-        scoreText.text = 'Pontos: 0'
-        timerText.text = 'Tempo: 60'
+        gameOverBackground.visible = false;
+        gameOverTitle.visible = false;
+        finalScoreText.visible = false;
+        gameOverReasonText.visible = false;
 
-        pauseText.visible = false
+        restartButton.visible = false;
+        restartText.visible = false;
 
-        gameOverBackground.visible = false
-        gameOverTitle.visible = false
-        finalScoreText.visible = false
-        gameOverReasonText.visible = false
-
-        restartButton.visible = false
-        restartText.visible = false
-
-        menuButton.visible = false
-        menuText.visible = false
-
-        /*
-         * Remove projéteis.
-         */
+        menuButton.visible = false;
+        menuText.visible = false;
 
         for (const projectile of projectiles) {
-          projectile.graphic.destroy()
+          projectile.graphic.destroy();
         }
 
-        projectiles.length = 0
-
-        /*
-         * Remove inimigos.
-         */
+        projectiles.length = 0;
 
         for (const enemy of enemies) {
-          enemy.graphic.destroy()
+          enemy.graphic.destroy();
         }
 
-        enemies.length = 0
+        enemies.length = 0;
 
-        /*
-         * Cria novos inimigos.
-         */
+        createChaser();
+        createChaser();
+        createShooter();
 
-        createChaser()
-        createChaser()
-        createShooter()
-
-        setShowMenu(false)
+        setShowMenu(false);
+        setShowHistory(false);
       }
 
-      /*
-       * =========================
-       * BOTÕES
-       * =========================
-       */
+      // =========================
+      // VOLTAR AO MENU
+      // =========================
 
-      restartButton.on(
-        'pointerdown',
-        () => {
-          resetGame()
-        },
-      )
+      function returnToMenu() {
+        gameOver = true;
+        paused = true;
 
-      menuButton.on(
-        'pointerdown',
-        () => {
-          returnToMenu()
-        },
-      )
+        for (const projectile of projectiles) {
+          projectile.graphic.destroy();
+        }
 
-      /*
-       * =========================
-       * START GAME
-       * =========================
-       */
+        projectiles.length = 0;
+
+        for (const enemy of enemies) {
+          enemy.graphic.destroy();
+        }
+
+        enemies.length = 0;
+
+        gameOverBackground.visible = false;
+        gameOverTitle.visible = false;
+        finalScoreText.visible = false;
+        gameOverReasonText.visible = false;
+
+        restartButton.visible = false;
+        restartText.visible = false;
+
+        menuButton.visible = false;
+        menuText.visible = false;
+
+        pauseText.visible = true;
+
+        setShowMenu(true);
+        setShowHistory(false);
+      }
+
+      // =========================
+      // BOTÕES PIXI
+      // =========================
+
+      restartButton.on("pointerdown", () => {
+        resetGame();
+      });
+
+      menuButton.on("pointerdown", () => {
+        returnToMenu();
+      });
+
+      // =========================
+      // START GAME
+      // =========================
 
       const startGame = () => {
-        paused = false
-        pauseText.visible = false
+        resetGame();
+      };
 
-        setShowMenu(false)
-      }
+      window.addEventListener("start-game", startGame);
 
-      window.addEventListener(
-        'start-game',
-        startGame,
-      )
-
-      /*
-       * =========================
-       * GAME LOOP
-       * =========================
-       */
+      // =========================
+      // GAME LOOP
+      // =========================
 
       pixiApp.ticker.add((ticker) => {
         if (gameOver || paused) {
-          return
+          return;
         }
 
-        const deltaTime =
-          ticker.deltaTime
+        const deltaTime = ticker.deltaTime;
 
-        /*
-         * PLAYER
-         */
+        // PLAYER
 
-        const rotationSpeed = 0.05
-        const movementSpeed = 3
+        const rotationSpeed = 0.05;
+        const movementSpeed = 3;
 
-        if (
-          keys['arrowleft'] ||
-          keys['a']
-        ) {
-          player.rotation -=
-            rotationSpeed *
-            deltaTime
+        if (keys["arrowleft"] || keys["a"]) {
+          player.rotation -= rotationSpeed * deltaTime;
         }
 
-        if (
-          keys['arrowright'] ||
-          keys['d']
-        ) {
-          player.rotation +=
-            rotationSpeed *
-            deltaTime
+        if (keys["arrowright"] || keys["d"]) {
+          player.rotation += rotationSpeed * deltaTime;
         }
 
-        let moveX = 0
-        let moveY = 0
+        let moveX = 0;
+        let moveY = 0;
 
-        if (
-          keys['arrowup'] ||
-          keys['w']
-        ) {
-          moveX =
-            Math.sin(player.rotation) *
-            movementSpeed *
-            deltaTime
+        if (keys["arrowup"] || keys["w"]) {
+          moveX = Math.sin(player.rotation) * movementSpeed * deltaTime;
 
-          moveY =
-            -Math.cos(player.rotation) *
-            movementSpeed *
-            deltaTime
+          moveY = -Math.cos(player.rotation) * movementSpeed * deltaTime;
         }
 
-        const nextPlayerX =
-          player.x + moveX
+        const nextPlayerX = player.x + moveX;
 
-        const nextPlayerY =
-          player.y + moveY
+        const nextPlayerY = player.y + moveY;
 
         if (
           nextPlayerX > 20 &&
           nextPlayerX < 780 &&
-          !collidesWithIsland(
-            nextPlayerX,
-            player.y,
-            20,
-          )
+          !collidesWithIsland(nextPlayerX, player.y, 20)
         ) {
-          player.x = nextPlayerX
+          player.x = nextPlayerX;
         }
 
         if (
           nextPlayerY > 20 &&
           nextPlayerY < 580 &&
-          !collidesWithIsland(
-            player.x,
-            nextPlayerY,
-            20,
-          )
+          !collidesWithIsland(player.x, nextPlayerY, 20)
         ) {
-          player.y = nextPlayerY
+          player.y = nextPlayerY;
         }
 
-        /*
-         * TIRO FRONTAL
-         */
+        // TIRO FRONTAL
 
-        if (keys[' ']) {
-          keys[' '] = false
+        if (keys[" "]) {
+          keys[" "] = false;
 
-          createProjectile(
-            player.x,
-            player.y,
-            player.rotation -
-              Math.PI / 2,
-          )
+          createProjectile(player.x, player.y, player.rotation - Math.PI / 2);
         }
 
-        /*
-         * TIRO LATERAL ESQUERDO
-         */
+        // TIRO LATERAL ESQUERDO
 
-        if (keys['q']) {
-          keys['q'] = false
+        if (keys["q"]) {
+          keys["q"] = false;
 
-          const sideAngle =
-            player.rotation - Math.PI
+          const sideAngle = player.rotation - Math.PI;
 
           for (let i = -1; i <= 1; i++) {
-            createProjectile(
-              player.x,
-              player.y,
-              sideAngle + i * 0.08,
-            )
+            createProjectile(player.x, player.y, sideAngle + i * 0.08);
           }
         }
 
-        /*
-         * TIRO LATERAL DIREITO
-         */
+        // TIRO LATERAL DIREITO
 
-        if (keys['e']) {
-          keys['e'] = false
+        if (keys["e"]) {
+          keys["e"] = false;
 
-          const sideAngle =
-            player.rotation
+          const sideAngle = player.rotation;
 
           for (let i = -1; i <= 1; i++) {
-            createProjectile(
-              player.x,
-              player.y,
-              sideAngle + i * 0.08,
-            )
+            createProjectile(player.x, player.y, sideAngle + i * 0.08);
           }
         }
 
-        /*
-         * PROJÉTEIS
-         */
+        // PROJÉTEIS
 
-        for (
-          let i = projectiles.length - 1;
-          i >= 0;
-          i--
-        ) {
-          const projectile =
-            projectiles[i]
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+          const projectile = projectiles[i];
 
-          projectile.graphic.x +=
-            projectile.vx *
-            deltaTime
+          projectile.graphic.x += projectile.vx * deltaTime;
 
-          projectile.graphic.y +=
-            projectile.vy *
-            deltaTime
+          projectile.graphic.y += projectile.vy * deltaTime;
 
-          /*
-           * Saiu da tela.
-           */
+          // Saiu da tela
 
           if (
             projectile.graphic.x < -20 ||
@@ -920,34 +716,22 @@ function App() {
             projectile.graphic.y < -20 ||
             projectile.graphic.y > 620
           ) {
-            projectile.graphic.destroy()
-
-            projectiles.splice(i, 1)
-
-            continue
+            projectile.graphic.destroy();
+            projectiles.splice(i, 1);
+            continue;
           }
 
-          /*
-           * Colisão com ilha.
-           */
+          // Colisão com ilha
 
           if (
-            collidesWithIsland(
-              projectile.graphic.x,
-              projectile.graphic.y,
-              5,
-            )
+            collidesWithIsland(projectile.graphic.x, projectile.graphic.y, 5)
           ) {
-            projectile.graphic.destroy()
-
-            projectiles.splice(i, 1)
-
-            continue
+            projectile.graphic.destroy();
+            projectiles.splice(i, 1);
+            continue;
           }
 
-          /*
-           * Projétil inimigo contra player.
-           */
+          // Projétil inimigo contra player
 
           if (projectile.enemy) {
             if (
@@ -958,41 +742,30 @@ function App() {
                 player.y,
               ) < 25
             ) {
-              health -= 10
+              health -= 10;
 
-              healthText.text =
-                `Vida: ${Math.max(
-                  health,
-                  0,
-                )}`
+              healthText.text = `Vida: ${Math.max(health, 0)}`;
 
-              projectile.graphic.destroy()
-
-              projectiles.splice(i, 1)
+              projectile.graphic.destroy();
+              projectiles.splice(i, 1);
 
               if (health <= 0) {
-                finishGame(
-                  'Seu navio foi destruído.',
-                )
+                finishGame("Seu navio foi destruído.");
               }
 
-              continue
+              continue;
             }
           } else {
-            /*
-             * Projétil do player contra inimigos.
-             */
+            // Projétil do player contra inimigos
 
-            let hitEnemy = false
+            let hitEnemy = false;
 
             for (
-              let enemyIndex =
-                enemies.length - 1;
+              let enemyIndex = enemies.length - 1;
               enemyIndex >= 0;
               enemyIndex--
             ) {
-              const enemy =
-                enemies[enemyIndex]
+              const enemy = enemies[enemyIndex];
 
               if (
                 distance(
@@ -1002,257 +775,170 @@ function App() {
                   enemy.graphic.y,
                 ) < 23
               ) {
-                enemy.graphic.destroy()
+                enemy.graphic.destroy();
 
-                enemies.splice(
-                  enemyIndex,
-                  1,
-                )
+                enemies.splice(enemyIndex, 1);
 
-                projectile.graphic.destroy()
+                projectile.graphic.destroy();
 
-                projectiles.splice(
-                  i,
-                  1,
-                )
+                projectiles.splice(i, 1);
 
-                score++
+                score++;
 
-                scoreText.text =
-                  `Pontos: ${score}`
+                scoreText.text = `Pontos: ${score}`;
 
-                hitEnemy = true
+                hitEnemy = true;
 
-                break
+                break;
               }
             }
 
             if (hitEnemy) {
-              continue
+              continue;
             }
           }
         }
 
-        /*
-         * INIMIGOS
-         */
+        // INIMIGOS
 
         for (const enemy of enemies) {
-          const dx =
-            player.x -
-            enemy.graphic.x
+          const dx = player.x - enemy.graphic.x;
 
-          const dy =
-            player.y -
-            enemy.graphic.y
+          const dy = player.y - enemy.graphic.y;
 
-          const angle =
-            Math.atan2(dy, dx)
+          const angle = Math.atan2(dy, dx);
 
-          /*
-           * CHASER
-           */
+          // CHASER
 
-          if (enemy.type === 'chaser') {
+          if (enemy.type === "chaser") {
             const nextX =
-              enemy.graphic.x +
-              Math.cos(angle) *
-                enemy.speed *
-                deltaTime
+              enemy.graphic.x + Math.cos(angle) * enemy.speed * deltaTime;
 
             const nextY =
-              enemy.graphic.y +
-              Math.sin(angle) *
-                enemy.speed *
-                deltaTime
+              enemy.graphic.y + Math.sin(angle) * enemy.speed * deltaTime;
 
-            if (
-              !collidesWithIsland(
-                nextX,
-                nextY,
-                18,
-              )
-            ) {
-              enemy.graphic.x = nextX
-              enemy.graphic.y = nextY
+            if (!collidesWithIsland(nextX, nextY, 18)) {
+              enemy.graphic.x = nextX;
+              enemy.graphic.y = nextY;
             }
 
-            /*
-             * Colisão direta com player.
-             */
-
             if (
-              distance(
-                enemy.graphic.x,
-                enemy.graphic.y,
-                player.x,
-                player.y,
-              ) < 35
+              distance(enemy.graphic.x, enemy.graphic.y, player.x, player.y) <
+              35
             ) {
-              health -= 20
+              health -= 20;
 
-              healthText.text =
-                `Vida: ${Math.max(
-                  health,
-                  0,
-                )}`
+              healthText.text = `Vida: ${Math.max(health, 0)}`;
 
-              enemy.graphic.x =
-                Math.random() *
-                  700 +
-                50
+              enemy.graphic.x = Math.random() * 700 + 50;
 
-              enemy.graphic.y =
-                Math.random() *
-                  300 +
-                50
+              enemy.graphic.y = Math.random() * 300 + 50;
 
               if (health <= 0) {
-                finishGame(
-                  'Seu navio foi destruído.',
-                )
+                finishGame("Seu navio foi destruído.");
               }
             }
           }
 
-          /*
-           * SHOOTER
-           */
+          // SHOOTER
 
-          if (enemy.type === 'shooter') {
-            enemy.shootTimer +=
-              deltaTime
+          if (enemy.type === "shooter") {
+            enemy.shootTimer += deltaTime;
 
-            if (
-              enemy.shootTimer > 90
-            ) {
-              enemy.shootTimer = 0
+            if (enemy.shootTimer > 90) {
+              enemy.shootTimer = 0;
 
-              createProjectile(
-                enemy.graphic.x,
-                enemy.graphic.y,
-                angle,
-                true,
-              )
+              createProjectile(enemy.graphic.x, enemy.graphic.y, angle, true);
             }
           }
         }
 
-        /*
-         * TIMER
-         */
+        // TIMER
 
-        gameTimer += deltaTime
+        gameTimer += deltaTime;
 
         if (gameTimer >= 60) {
-          gameTimer = 0
-          timeRemaining--
+          gameTimer = 0;
+          timeRemaining--;
 
-          timerText.text =
-            `Tempo: ${timeRemaining}`
+          timerText.text = `Tempo: ${timeRemaining}`;
 
           if (timeRemaining <= 0) {
-            finishGame(
-              'Tempo esgotado.',
-            )
+            finishGame("Tempo esgotado.");
           }
         }
 
-        /*
-         * Reposição dos inimigos.
-         */
+        // Reposição dos inimigos
 
         if (enemies.length < 3) {
-          createChaser()
+          createChaser();
         }
-      })
+      });
 
-      /*
-       * =========================
-       * LIMPEZA
-       * =========================
-       */
+      // =========================
+      // LIMPEZA
+      // =========================
 
       return () => {
-        window.removeEventListener(
-          'keydown',
-          handleKeyDown,
-        )
+        window.removeEventListener("keydown", handleKeyDown);
 
-        window.removeEventListener(
-          'keyup',
-          handleKeyUp,
-        )
+        window.removeEventListener("keyup", handleKeyUp);
 
-        window.removeEventListener(
-          'blur',
-          handleBlur,
-        )
+        window.removeEventListener("blur", handleBlur);
 
-        window.removeEventListener(
-          'start-game',
-          startGame,
-        )
+        window.removeEventListener("start-game", startGame);
 
-        restartButton.removeAllListeners()
-        menuButton.removeAllListeners()
+        restartButton.removeAllListeners();
+        menuButton.removeAllListeners();
 
-        pixiApp.destroy(true)
-      }
-    }
+        pixiApp.destroy(true);
+      };
+    };
 
-    initializeGame()
+    initializeGame();
 
     return () => {
-      destroyed = true
+      destroyed = true;
+      pixiApp.destroy(true);
+    };
+  }, []);
 
-      if (pixiApp) {
-        pixiApp.destroy(true)
-      }
-    }
-  }, [])
-
-  /*
-   * =========================
-   * CARREGAR HISTÓRICO
-   * =========================
-   */
+  // =========================
+  // CARREGAR HISTÓRICO
+  // =========================
 
   useEffect(() => {
-    setHistory(getMatchHistory())
-  }, [])
+    setHistory(getMatchHistory());
+  }, []);
 
   return (
     <div
       style={{
-        minHeight: '100vh',
-        background: '#07111d',
-        color: '#fff',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
+        minHeight: "100vh",
+        background: "#07111d",
+        color: "#fff",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
       }}
     >
-      /*
-       * =========================
-       * MENU PRINCIPAL
-       * =========================
-       */
+      {/* MENU PRINCIPAL */}
 
       {showMenu && (
         <section
           style={{
-            position: 'fixed',
+            position: "fixed",
             inset: 0,
             zIndex: 10,
-            background:
-              'linear-gradient(180deg, #07111d, #12304a)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
+            background: "linear-gradient(180deg, #07111d, #12304a)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
             gap: 20,
+            overflowY: "auto",
+            padding: 30,
           }}
         >
           <h1
@@ -1275,15 +961,13 @@ function App() {
 
           <button
             onClick={() => {
-              window.dispatchEvent(
-                new Event('start-game'),
-              )
+              window.dispatchEvent(new Event("start-game"));
             }}
             style={{
-              padding: '15px 50px',
+              padding: "15px 50px",
               fontSize: 22,
-              fontWeight: 'bold',
-              cursor: 'pointer',
+              fontWeight: "bold",
+              cursor: "pointer",
             }}
           >
             JOGAR
@@ -1291,16 +975,13 @@ function App() {
 
           <button
             onClick={() => {
-              setHistory(
-                getMatchHistory(),
-              )
-
-              setShowHistory(true)
+              setHistory(getMatchHistory());
+              setShowHistory(true);
             }}
             style={{
-              padding: '10px 35px',
+              padding: "10px 35px",
               fontSize: 18,
-              cursor: 'pointer',
+              cursor: "pointer",
             }}
           >
             HISTÓRICO
@@ -1308,7 +989,7 @@ function App() {
 
           <div
             style={{
-              textAlign: 'center',
+              textAlign: "center",
               lineHeight: 1.7,
             }}
           >
@@ -1316,116 +997,86 @@ function App() {
 
             <div>W / ↑ — mover</div>
             <div>A / D — girar</div>
-            <div>
-              Espaço — tiro frontal
-            </div>
-            <div>
-              Q — tiros laterais esquerdos
-            </div>
-            <div>
-              E — tiros laterais direitos
-            </div>
+            <div>Espaço — tiro frontal</div>
+            <div>Q — tiros laterais esquerdos</div>
+            <div>E — tiros laterais direitos</div>
             <div>P — pausar</div>
           </div>
+
+          {/* RANKING */}
+
+          <Ranking />
         </section>
       )}
 
-      /*
-       * =========================
-       * HISTÓRICO
-       * =========================
-       */
+      {/* HISTÓRICO */}
 
       {showHistory && (
         <section
           style={{
-            position: 'fixed',
+            position: "fixed",
             inset: 0,
             zIndex: 20,
-            background: '#07111d',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
+            background: "#07111d",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
             padding: 40,
-            overflowY: 'auto',
+            overflowY: "auto",
           }}
         >
-          <h2>
-            HISTÓRICO DE PARTIDAS
-          </h2>
+          <h2>HISTÓRICO DE PARTIDAS</h2>
 
           {history.length === 0 ? (
-            <p>
-              Nenhuma partida registrada
-              ainda.
-            </p>
+            <p>Nenhuma partida registrada ainda.</p>
           ) : (
             <div
               style={{
-                width: '100%',
+                width: "100%",
                 maxWidth: 700,
               }}
             >
-              {history.map(
-                (result, index) => (
+              {history.map((result, index) => (
+                <div
+                  key={result.id}
+                  style={{
+                    border: "1px solid #345",
+                    borderRadius: 8,
+                    padding: 15,
+                    marginBottom: 10,
+                    background: "#102233",
+                  }}
+                >
+                  <strong>Partida #{index + 1}</strong>
+
+                  <div>Pontuação: {result.score}</div>
+
+                  <div>Duração: {result.duration}s</div>
+
+                  <div>Resultado: {result.reason}</div>
+
                   <div
-                    key={result.id}
                     style={{
-                      border:
-                        '1px solid #345',
-                      borderRadius: 8,
-                      padding: 15,
-                      marginBottom: 10,
-                      background:
-                        '#102233',
+                      fontSize: 13,
+                      opacity: 0.7,
+                      marginTop: 5,
                     }}
                   >
-                    <strong>
-                      Partida #{index + 1}
-                    </strong>
-
-                    <div>
-                      Pontuação:{' '}
-                      {result.score}
-                    </div>
-
-                    <div>
-                      Duração:{' '}
-                      {result.duration}s
-                    </div>
-
-                    <div>
-                      Resultado:{' '}
-                      {result.reason}
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: 13,
-                        opacity: 0.7,
-                        marginTop: 5,
-                      }}
-                    >
-                      {new Date(
-                        result.createdAt,
-                      ).toLocaleString(
-                        'pt-BR',
-                      )}
-                    </div>
+                    {new Date(result.createdAt).toLocaleString("pt-BR")}
                   </div>
-                ),
-              )}
+                </div>
+              ))}
             </div>
           )}
 
           <button
             onClick={() => {
-              setShowHistory(false)
+              setShowHistory(false);
             }}
             style={{
               marginTop: 20,
-              padding: '10px 30px',
-              cursor: 'pointer',
+              padding: "10px 30px",
+              cursor: "pointer",
             }}
           >
             VOLTAR AO MENU
@@ -1450,7 +1101,7 @@ function App() {
         PixiJS + React + TypeScript
       </p>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
