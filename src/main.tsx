@@ -6,7 +6,7 @@ import App from './App.tsx'
 const queryClient = new QueryClient()
 
 async function enableMocking() {
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV || import.meta.env.PROD) {
     const { worker } = await import('./mocks/browser')
 
     await worker.start()
