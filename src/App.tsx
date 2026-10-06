@@ -1,55 +1,69 @@
 import { useEffect, useRef, useState } from "react";
 import { Application, Graphics, Text } from "pixi.js";
 import { Ranking } from "./components/Ranking";
+import { Options } from "./components/Options";
 import { submitScore } from "./api/ranking";
+import {
+  getHistory,
+  submitHistory,
+  type MatchResult,
+} from "./api/history";
+import {
+  defaultGameConfig,
+  type GameConfig,
+} from "./config/gameConfig";
+const CONFIG_KEY = "pirate-battle-config";
 
-type MatchResult = {
-  id: string;
-  score: number;
-  duration: number;
-  reason: string;
-  createdAt: string;
-};
-
-const HISTORY_KEY = "pirate-battle-history";
-
-function saveMatchResult(result: MatchResult) {
+function getStoredGameConfig(): GameConfig {
   try {
-    const stored = localStorage.getItem(HISTORY_KEY);
-
-    const history: MatchResult[] = stored ? JSON.parse(stored) : [];
-
-    history.unshift(result);
-
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 20)));
-
-    console.log("Resultado salvo:", result);
-  } catch (error) {
-    console.error("Erro ao salvar resultado:", error);
-  }
-}
-
-function getMatchHistory(): MatchResult[] {
-  try {
-    const stored = localStorage.getItem(HISTORY_KEY);
+    const stored = localStorage.getItem(CONFIG_KEY);
 
     if (!stored) {
-      return [];
+      return defaultGameConfig;
     }
 
-    return JSON.parse(stored);
+    const savedConfig = JSON.parse(stored);
+
+    return {
+      ...defaultGameConfig,
+      ...savedConfig,
+    };
   } catch (error) {
-    console.error("Erro ao carregar histórico:", error);
-    return [];
+    console.error("Erro ao carregar configurações:", error);
+    return defaultGameConfig;
   }
 }
 
 function App() {
   const gameContainerRef = useRef<HTMLDivElement | null>(null);
 
+  const gameConfigRef = useRef<GameConfig>(
+    getStoredGameConfig(),
+  );
+
+  const [gameConfig, setGameConfig] = useState<GameConfig>(
+    getStoredGameConfig(),
+  );
+
   const [showMenu, setShowMenu] = useState(true);
+  const [showOptions, setShowOptions] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<MatchResult[]>([]);
+
+  function handleSaveConfig(config: GameConfig) {
+    try {
+      localStorage.setItem(
+        CONFIG_KEY,
+        JSON.stringify(config),
+      );
+
+      gameConfigRef.current = config;
+      setGameConfig(config);
+      setShowOptions(false);
+    } catch (error) {
+      console.error("Erro ao salvar configurações:", error);
+    }
+  }
 
   useEffect(() => {
     if (!gameContainerRef.current) {
@@ -76,23 +90,16 @@ function App() {
 
       container.appendChild(pixiApp.canvas);
 
-      // =========================
-      // ESTADO DO JOGO
-      // =========================
-
-      let health = 100;
+      let health = gameConfigRef.current.playerMaxHealth;
       let score = 0;
-      let timeRemaining = 60;
+      let timeRemaining = gameConfigRef.current.sessionDuration;
       let paused = true;
       let gameOver = false;
       let gameTimer = 0;
-
-      // =========================
-      // HUD
-      // =========================
+      let enemySpawnTimer = 0;
 
       const healthText = new Text({
-        text: "Vida: 100",
+        text: `Vida: ${health}`,
         style: {
           fill: 0xffffff,
           fontSize: 20,
@@ -103,7 +110,7 @@ function App() {
       healthText.y = 20;
 
       const scoreText = new Text({
-        text: "Pontos: 0",
+        text: "Pontuação: 0",
         style: {
           fill: 0xffffff,
           fontSize: 20,
@@ -114,7 +121,7 @@ function App() {
       scoreText.y = 50;
 
       const timerText = new Text({
-        text: "Tempo: 60",
+        text: `Tempo: ${timeRemaining}`,
         style: {
           fill: 0xffffff,
           fontSize: 20,
@@ -124,11 +131,11 @@ function App() {
       timerText.x = 20;
       timerText.y = 80;
 
-      pixiApp.stage.addChild(healthText, scoreText, timerText);
-
-      // =========================
-      // PAUSE
-      // =========================
+      pixiApp.stage.addChild(
+        healthText,
+        scoreText,
+        timerText,
+      );
 
       const pauseText = new Text({
         text: "PAUSADO",
@@ -146,16 +153,14 @@ function App() {
 
       pixiApp.stage.addChild(pauseText);
 
-      // =========================
-      // GAME OVER
-      // =========================
-
       const gameOverBackground = new Graphics();
 
-      gameOverBackground.rect(150, 110, 500, 390).fill({
-        color: 0x000000,
-        alpha: 0.9,
-      });
+      gameOverBackground
+        .rect(150, 110, 500, 390)
+        .fill({
+          color: 0x000000,
+          alpha: 0.9,
+        });
 
       gameOverBackground.visible = false;
 
@@ -207,13 +212,11 @@ function App() {
 
       pixiApp.stage.addChild(gameOverReasonText);
 
-      // =========================
-      // BOTÃO JOGAR NOVAMENTE
-      // =========================
-
       const restartButton = new Graphics();
 
-      restartButton.roundRect(270, 320, 260, 60, 10).fill(0x1976d2);
+      restartButton
+        .roundRect(270, 320, 260, 60, 10)
+        .fill(0x1976d2);
 
       restartButton.eventMode = "static";
       restartButton.cursor = "pointer";
@@ -237,13 +240,11 @@ function App() {
 
       pixiApp.stage.addChild(restartText);
 
-      // =========================
-      // BOTÃO VOLTAR AO MENU
-      // =========================
-
       const menuButton = new Graphics();
 
-      menuButton.roundRect(270, 400, 260, 60, 10).fill(0x455a64);
+      menuButton
+        .roundRect(270, 400, 260, 60, 10)
+        .fill(0x455a64);
 
       menuButton.eventMode = "static";
       menuButton.cursor = "pointer";
@@ -252,7 +253,7 @@ function App() {
       pixiApp.stage.addChild(menuButton);
 
       const menuText = new Text({
-        text: "VOLTAR AO MENU",
+        text: "MENU PRINCIPAL",
         style: {
           fill: 0xffffff,
           fontSize: 20,
@@ -266,10 +267,6 @@ function App() {
       menuText.visible = false;
 
       pixiApp.stage.addChild(menuText);
-
-      // =========================
-      // PLAYER
-      // =========================
 
       const player = new Graphics();
 
@@ -286,13 +283,13 @@ function App() {
 
       pixiApp.stage.addChild(player);
 
-      // =========================
-      // ILHAS
-      // =========================
-
       const islands: Graphics[] = [];
 
-      function createIsland(x: number, y: number, radius: number) {
+      function createIsland(
+        x: number,
+        y: number,
+        radius: number,
+      ) {
         const island = new Graphics();
 
         island.circle(0, 0, radius).fill(0x4f6f3f);
@@ -307,10 +304,6 @@ function App() {
       createIsland(400, 350, 55);
       createIsland(200, 180, 45);
       createIsland(620, 200, 50);
-
-      // =========================
-      // PROJÉTEIS
-      // =========================
 
       type Projectile = {
         graphic: Graphics;
@@ -327,6 +320,8 @@ function App() {
         angle: number,
         enemy = false,
       ) {
+        const config = gameConfigRef.current;
+
         const projectile = new Graphics();
 
         projectile
@@ -336,7 +331,9 @@ function App() {
         projectile.x = x;
         projectile.y = y;
 
-        const speed = enemy ? 4 : 7;
+        const speed = enemy
+          ? config.shooterProjectileSpeed
+          : config.playerProjectileSpeed;
 
         projectiles.push({
           graphic: projectile,
@@ -348,52 +345,60 @@ function App() {
         pixiApp.stage.addChild(projectile);
       }
 
-      // =========================
-      // INIMIGOS
-      // =========================
-
       type Enemy = {
         graphic: Graphics;
         type: "chaser" | "shooter";
         speed: number;
         shootTimer: number;
+        health: number;
+        maxHealth: number;
       };
 
       const enemies: Enemy[] = [];
 
       function createChaser() {
+        const config = gameConfigRef.current;
+
         const enemyGraphic = new Graphics();
 
-        enemyGraphic.circle(0, 0, 18).fill(0xff3333);
+        enemyGraphic
+          .circle(0, 0, 18)
+          .fill(0xff3333);
 
         enemyGraphic.x = Math.random() * 700 + 50;
-
         enemyGraphic.y = Math.random() * 300 + 50;
 
         enemies.push({
           graphic: enemyGraphic,
           type: "chaser",
-          speed: 1.2,
+          speed: config.chaserSpeed,
           shootTimer: 0,
+          health: config.chaserMaxHealth,
+          maxHealth: config.chaserMaxHealth,
         });
 
         pixiApp.stage.addChild(enemyGraphic);
       }
 
       function createShooter() {
+        const config = gameConfigRef.current;
+
         const enemyGraphic = new Graphics();
 
-        enemyGraphic.circle(0, 0, 18).fill(0xff8800);
+        enemyGraphic
+          .circle(0, 0, 18)
+          .fill(0xff8800);
 
         enemyGraphic.x = Math.random() * 700 + 50;
-
         enemyGraphic.y = Math.random() * 300 + 50;
 
         enemies.push({
           graphic: enemyGraphic,
           type: "shooter",
-          speed: 0.5,
+          speed: config.shooterSpeed,
           shootTimer: 0,
+          health: config.shooterMaxHealth,
+          maxHealth: config.shooterMaxHealth,
         });
 
         pixiApp.stage.addChild(enemyGraphic);
@@ -403,13 +408,11 @@ function App() {
       createChaser();
       createShooter();
 
-      // =========================
-      // CONTROLES
-      // =========================
-
       const keys: Record<string, boolean> = {};
 
-      const handleKeyDown = (event: KeyboardEvent) => {
+      const handleKeyDown = (
+        event: KeyboardEvent,
+      ) => {
         keys[event.key.toLowerCase()] = true;
 
         if (event.key.toLowerCase() === "p") {
@@ -424,7 +427,9 @@ function App() {
         }
       };
 
-      const handleKeyUp = (event: KeyboardEvent) => {
+      const handleKeyUp = (
+        event: KeyboardEvent,
+      ) => {
         keys[event.key.toLowerCase()] = false;
       };
 
@@ -435,45 +440,64 @@ function App() {
         }
       };
 
-      window.addEventListener("keydown", handleKeyDown);
+      window.addEventListener(
+        "keydown",
+        handleKeyDown,
+      );
 
-      window.addEventListener("keyup", handleKeyUp);
+      window.addEventListener(
+        "keyup",
+        handleKeyUp,
+      );
 
-      window.addEventListener("blur", handleBlur);
+      window.addEventListener(
+        "blur",
+        handleBlur,
+      );
 
-      // =========================
-      // COLISÃO
-      // =========================
-
-      function distance(x1: number, y1: number, x2: number, y2: number) {
+      function distance(
+        x1: number,
+        y1: number,
+        x2: number,
+        y2: number,
+      ) {
         const dx = x1 - x2;
         const dy = y1 - y2;
 
         return Math.sqrt(dx * dx + dy * dy);
       }
 
-      function collidesWithIsland(x: number, y: number, radius: number) {
-        return islands.some((island) => {
-          return distance(x, y, island.x, island.y) < radius + island.width / 2;
-        });
+      function collidesWithIsland(
+        x: number,
+        y: number,
+        radius: number,
+      ) {
+        return islands.some(
+          (island) =>
+            distance(
+              x,
+              y,
+              island.x,
+              island.y,
+            ) <
+            radius + island.width / 2,
+        );
       }
-
-      // =========================
-      // GAME OVER
-      // =========================
 
       function finishGame(reason: string) {
         if (gameOver) {
           return;
         }
 
+        const config = gameConfigRef.current;
+
         gameOver = true;
         paused = false;
 
-        const duration = 60 - timeRemaining;
+        const duration =
+          config.sessionDuration - timeRemaining;
 
         finalScoreText.text = `Pontuação: ${score}`;
-
         gameOverReasonText.text = reason;
 
         gameOverBackground.visible = true;
@@ -483,73 +507,92 @@ function App() {
 
         restartButton.visible = true;
         restartText.visible = true;
-
         menuButton.visible = true;
         menuText.visible = true;
+
         pixiApp.stage.setChildIndex(
-  gameOverBackground,
-  pixiApp.stage.children.length - 1,
-);
+          gameOverBackground,
+          pixiApp.stage.children.length - 1,
+        );
 
-pixiApp.stage.setChildIndex(
-  gameOverTitle,
-  pixiApp.stage.children.length - 1,
-);
+        pixiApp.stage.setChildIndex(
+          gameOverTitle,
+          pixiApp.stage.children.length - 1,
+        );
 
-pixiApp.stage.setChildIndex(
-  finalScoreText,
-  pixiApp.stage.children.length - 1,
-);
+        pixiApp.stage.setChildIndex(
+          finalScoreText,
+          pixiApp.stage.children.length - 1,
+        );
 
-pixiApp.stage.setChildIndex(
-  gameOverReasonText,
-  pixiApp.stage.children.length - 1,
-);
+        pixiApp.stage.setChildIndex(
+          gameOverReasonText,
+          pixiApp.stage.children.length - 1,
+        );
 
-pixiApp.stage.setChildIndex(
-  restartButton,
-  pixiApp.stage.children.length - 1,
-);
+        pixiApp.stage.setChildIndex(
+          restartButton,
+          pixiApp.stage.children.length - 1,
+        );
 
-pixiApp.stage.setChildIndex(
-  restartText,
-  pixiApp.stage.children.length - 1,
-);
+        pixiApp.stage.setChildIndex(
+          restartText,
+          pixiApp.stage.children.length - 1,
+        );
 
-pixiApp.stage.setChildIndex(
-  menuButton,
-  pixiApp.stage.children.length - 1,
-);
+        pixiApp.stage.setChildIndex(
+          menuButton,
+          pixiApp.stage.children.length - 1,
+        );
 
-pixiApp.stage.setChildIndex(
-  menuText,
-  pixiApp.stage.children.length - 1,
-);
+        pixiApp.stage.setChildIndex(
+          menuText,
+          pixiApp.stage.children.length - 1,
+        );
 
-        const result: MatchResult = {
-          id: Date.now().toString(),
+        const result = {
+          player: "Captain Bueno",
           score,
           duration,
           reason,
-          createdAt: new Date().toISOString(),
+          date: new Date().toISOString(),
         };
 
-        saveMatchResult(result);
-        setHistory(getMatchHistory());
-        submitScore("Captain Bueno", score).catch((error) => {
-          console.error("Erro ao enviar pontuação para o ranking:", error);
-        });
+        submitHistory(result)
+          .then((savedResult) => {
+            setHistory((currentHistory) => [
+              savedResult,
+              ...currentHistory,
+            ]);
+          })
+          .catch((error) =>
+            console.error(
+              "Erro ao salvar histórico:",
+              error,
+            ),
+          );
+
+        if (score > 0) {
+          submitScore(
+            "Captain Bueno",
+            score,
+          ).catch((error) =>
+            console.error(
+              "Erro ao enviar pontuação:",
+              error,
+            ),
+          );
+        }
       }
 
-      // =========================
-      // RESET
-      // =========================
-
       function resetGame() {
-        health = 100;
+        const config = gameConfigRef.current;
+
+        health = config.playerMaxHealth;
         score = 0;
-        timeRemaining = 60;
+        timeRemaining = config.sessionDuration;
         gameTimer = 0;
+        enemySpawnTimer = 0;
         gameOver = false;
         paused = false;
 
@@ -557,9 +600,9 @@ pixiApp.stage.setChildIndex(
         player.y = 500;
         player.rotation = 0;
 
-        healthText.text = "Vida: 100";
-        scoreText.text = "Pontos: 0";
-        timerText.text = "Tempo: 60";
+        healthText.text = `Vida: ${health}`;
+        scoreText.text = "Pontuação: 0";
+        timerText.text = `Tempo: ${timeRemaining}`;
 
         pauseText.visible = false;
 
@@ -570,7 +613,6 @@ pixiApp.stage.setChildIndex(
 
         restartButton.visible = false;
         restartText.visible = false;
-
         menuButton.visible = false;
         menuText.visible = false;
 
@@ -592,11 +634,8 @@ pixiApp.stage.setChildIndex(
 
         setShowMenu(false);
         setShowHistory(false);
+        setShowOptions(false);
       }
-
-      // =========================
-      // VOLTAR AO MENU
-      // =========================
 
       function returnToMenu() {
         gameOver = true;
@@ -621,7 +660,6 @@ pixiApp.stage.setChildIndex(
 
         restartButton.visible = false;
         restartText.visible = false;
-
         menuButton.visible = false;
         menuText.visible = false;
 
@@ -629,71 +667,91 @@ pixiApp.stage.setChildIndex(
 
         setShowMenu(true);
         setShowHistory(false);
+        setShowOptions(false);
       }
 
-      // =========================
-      // BOTÕES PIXI
-      // =========================
+      restartButton.on(
+        "pointerdown",
+        () => resetGame(),
+      );
 
-      restartButton.on("pointerdown", () => {
-        resetGame();
-      });
+      menuButton.on(
+        "pointerdown",
+        () => returnToMenu(),
+      );
 
-      menuButton.on("pointerdown", () => {
-        returnToMenu();
-      });
+      const startGame = () => resetGame();
 
-      // =========================
-      // START GAME
-      // =========================
-
-      const startGame = () => {
-        resetGame();
-      };
-
-      window.addEventListener("start-game", startGame);
-
-      // =========================
-      // GAME LOOP
-      // =========================
+      window.addEventListener(
+        "start-game",
+        startGame,
+      );
 
       pixiApp.ticker.add((ticker) => {
         if (gameOver || paused) {
           return;
         }
 
+        const config = gameConfigRef.current;
+
         const deltaTime = ticker.deltaTime;
+        const deltaSeconds =
+          ticker.deltaMS / 1000;
 
-        // PLAYER
+        const rotationSpeed =
+          config.playerRotationSpeed;
 
-        const rotationSpeed = 0.05;
-        const movementSpeed = 3;
+        const movementSpeed =
+          config.playerSpeed;
 
-        if (keys["arrowleft"] || keys["a"]) {
-          player.rotation -= rotationSpeed * deltaTime;
+        if (
+          keys["arrowleft"] ||
+          keys["a"]
+        ) {
+          player.rotation -=
+            rotationSpeed * deltaTime;
         }
 
-        if (keys["arrowright"] || keys["d"]) {
-          player.rotation += rotationSpeed * deltaTime;
+        if (
+          keys["arrowright"] ||
+          keys["d"]
+        ) {
+          player.rotation +=
+            rotationSpeed * deltaTime;
         }
 
         let moveX = 0;
         let moveY = 0;
 
-        if (keys["arrowup"] || keys["w"]) {
-          moveX = Math.sin(player.rotation) * movementSpeed * deltaTime;
+        if (
+          keys["arrowup"] ||
+          keys["w"]
+        ) {
+          moveX =
+            Math.sin(player.rotation) *
+            movementSpeed *
+            deltaTime;
 
-          moveY = -Math.cos(player.rotation) * movementSpeed * deltaTime;
+          moveY =
+            -Math.cos(player.rotation) *
+            movementSpeed *
+            deltaTime;
         }
 
-        const nextPlayerX = player.x + moveX;
+        const nextPlayerX =
+          player.x + moveX;
 
-        const nextPlayerY = player.y + moveY;
+        const nextPlayerY =
+          player.y + moveY;
 
         if (
           nextPlayerX > 20 &&
           nextPlayerX < 780 &&
-          !collidesWithIsland(nextPlayerX, player.y, 20)
+          !collidesWithIsland(
+            nextPlayerX,
+            player.y,
+            20,
+          )
         ) {
           player.x = nextPlayerX;
         }
@@ -701,53 +759,77 @@ pixiApp.stage.setChildIndex(
         if (
           nextPlayerY > 20 &&
           nextPlayerY < 580 &&
-          !collidesWithIsland(player.x, nextPlayerY, 20)
+          !collidesWithIsland(
+            player.x,
+            nextPlayerY,
+            20,
+          )
         ) {
           player.y = nextPlayerY;
         }
 
-        // TIRO FRONTAL
-
         if (keys[" "]) {
           keys[" "] = false;
 
-          createProjectile(player.x, player.y, player.rotation - Math.PI / 2);
+          createProjectile(
+            player.x,
+            player.y,
+            player.rotation -
+            Math.PI / 2,
+          );
         }
-
-        // TIRO LATERAL ESQUERDO
 
         if (keys["q"]) {
           keys["q"] = false;
 
-          const sideAngle = player.rotation - Math.PI;
+          const sideAngle =
+            player.rotation - Math.PI;
 
-          for (let i = -1; i <= 1; i++) {
-            createProjectile(player.x, player.y, sideAngle + i * 0.08);
+          for (
+            let i = -1;
+            i <= 1;
+            i++
+          ) {
+            createProjectile(
+              player.x,
+              player.y,
+              sideAngle + i * 0.08,
+            );
           }
         }
-
-        // TIRO LATERAL DIREITO
 
         if (keys["e"]) {
           keys["e"] = false;
 
-          const sideAngle = player.rotation;
+          const sideAngle =
+            player.rotation;
 
-          for (let i = -1; i <= 1; i++) {
-            createProjectile(player.x, player.y, sideAngle + i * 0.08);
+          for (
+            let i = -1;
+            i <= 1;
+            i++
+          ) {
+            createProjectile(
+              player.x,
+              player.y,
+              sideAngle + i * 0.08,
+            );
           }
         }
 
-        // PROJÉTEIS
+        for (
+          let i = projectiles.length - 1;
+          i >= 0;
+          i--
+        ) {
+          const projectile =
+            projectiles[i];
 
-        for (let i = projectiles.length - 1; i >= 0; i--) {
-          const projectile = projectiles[i];
+          projectile.graphic.x +=
+            projectile.vx * deltaTime;
 
-          projectile.graphic.x += projectile.vx * deltaTime;
-
-          projectile.graphic.y += projectile.vy * deltaTime;
-
-          // Saiu da tela
+          projectile.graphic.y +=
+            projectile.vy * deltaTime;
 
           if (
             projectile.graphic.x < -20 ||
@@ -760,17 +842,17 @@ pixiApp.stage.setChildIndex(
             continue;
           }
 
-          // Colisão com ilha
-
           if (
-            collidesWithIsland(projectile.graphic.x, projectile.graphic.y, 5)
+            collidesWithIsland(
+              projectile.graphic.x,
+              projectile.graphic.y,
+              5,
+            )
           ) {
             projectile.graphic.destroy();
             projectiles.splice(i, 1);
             continue;
           }
-
-          // Projétil inimigo contra player
 
           if (projectile.enemy) {
             if (
@@ -781,30 +863,36 @@ pixiApp.stage.setChildIndex(
                 player.y,
               ) < 25
             ) {
-              health -= 10;
+              health -= config.shooterDamage;
 
-              healthText.text = `Vida: ${Math.max(health, 0)}`;
+              healthText.text =
+                `Vida: ${Math.max(
+                  health,
+                  0,
+                )}`;
 
               projectile.graphic.destroy();
               projectiles.splice(i, 1);
 
               if (health <= 0) {
-                finishGame("Seu navio foi destruído.");
+                finishGame(
+                  "Seu navio foi destruído.",
+                );
               }
 
               continue;
             }
           } else {
-            // Projétil do player contra inimigos
-
             let hitEnemy = false;
 
             for (
-              let enemyIndex = enemies.length - 1;
+              let enemyIndex =
+                enemies.length - 1;
               enemyIndex >= 0;
               enemyIndex--
             ) {
-              const enemy = enemies[enemyIndex];
+              const enemy =
+                enemies[enemyIndex];
 
               if (
                 distance(
@@ -814,20 +902,27 @@ pixiApp.stage.setChildIndex(
                   enemy.graphic.y,
                 ) < 23
               ) {
-                enemy.graphic.destroy();
-
-                enemies.splice(enemyIndex, 1);
+                enemy.health -=
+                  config.playerProjectileDamage;
 
                 projectile.graphic.destroy();
-
                 projectiles.splice(i, 1);
 
-                score++;
+                if (enemy.health <= 0) {
+                  enemy.graphic.destroy();
 
-                scoreText.text = `Pontos: ${score}`;
+                  enemies.splice(
+                    enemyIndex,
+                    1,
+                  );
+
+                  score++;
+
+                  scoreText.text =
+                    `Pontuação: ${score}`;
+                }
 
                 hitEnemy = true;
-
                 break;
               }
             }
@@ -838,94 +933,209 @@ pixiApp.stage.setChildIndex(
           }
         }
 
-        // INIMIGOS
+        for (
+          let enemyIndex =
+            enemies.length - 1;
+          enemyIndex >= 0;
+          enemyIndex--
+        ) {
+          const enemy =
+            enemies[enemyIndex];
 
-        for (const enemy of enemies) {
-          const dx = player.x - enemy.graphic.x;
+          const dx =
+            player.x -
+            enemy.graphic.x;
 
-          const dy = player.y - enemy.graphic.y;
+          const dy =
+            player.y -
+            enemy.graphic.y;
 
-          const angle = Math.atan2(dy, dx);
+          const angle =
+            Math.atan2(dy, dx);
 
-          // CHASER
+          enemy.graphic.rotation =
+            angle;
 
-          if (enemy.type === "chaser") {
+          if (
+            enemy.type === "chaser"
+          ) {
             const nextX =
-              enemy.graphic.x + Math.cos(angle) * enemy.speed * deltaTime;
+              enemy.graphic.x +
+              Math.cos(angle) *
+              enemy.speed *
+              deltaTime;
 
             const nextY =
-              enemy.graphic.y + Math.sin(angle) * enemy.speed * deltaTime;
+              enemy.graphic.y +
+              Math.sin(angle) *
+              enemy.speed *
+              deltaTime;
 
-            if (!collidesWithIsland(nextX, nextY, 18)) {
-              enemy.graphic.x = nextX;
-              enemy.graphic.y = nextY;
+            if (
+              !collidesWithIsland(
+                nextX,
+                nextY,
+                18,
+              )
+            ) {
+              enemy.graphic.x =
+                nextX;
+
+              enemy.graphic.y =
+                nextY;
             }
 
             if (
-              distance(enemy.graphic.x, enemy.graphic.y, player.x, player.y) <
-              35
+              distance(
+                enemy.graphic.x,
+                enemy.graphic.y,
+                player.x,
+                player.y,
+              ) < 35
             ) {
-              health -= 20;
+              health -=
+                config.chaserDamage;
 
-              healthText.text = `Vida: ${Math.max(health, 0)}`;
+              healthText.text =
+                `Vida: ${Math.max(
+                  health,
+                  0,
+                )}`;
 
-              enemy.graphic.x = Math.random() * 700 + 50;
+              enemy.graphic.destroy();
 
-              enemy.graphic.y = Math.random() * 300 + 50;
+              enemies.splice(
+                enemyIndex,
+                1,
+              );
 
               if (health <= 0) {
-                finishGame("Seu navio foi destruído.");
+                finishGame(
+                  "Seu navio foi destruído.",
+                );
+              }
+
+              continue;
+            }
+          }
+
+          if (
+            enemy.type === "shooter"
+          ) {
+            const currentDistance =
+              distance(
+                enemy.graphic.x,
+                enemy.graphic.y,
+                player.x,
+                player.y,
+              );
+
+            if (
+              currentDistance >
+              config.shooterAttackRange
+            ) {
+              const nextX =
+                enemy.graphic.x +
+                Math.cos(angle) *
+                enemy.speed *
+                deltaTime;
+
+              const nextY =
+                enemy.graphic.y +
+                Math.sin(angle) *
+                enemy.speed *
+                deltaTime;
+
+              if (
+                !collidesWithIsland(
+                  nextX,
+                  nextY,
+                  18,
+                )
+              ) {
+                enemy.graphic.x =
+                  nextX;
+
+                enemy.graphic.y =
+                  nextY;
               }
             }
-          }
 
-          // SHOOTER
+            enemy.shootTimer +=
+              deltaSeconds;
 
-          if (enemy.type === "shooter") {
-            enemy.shootTimer += deltaTime;
-
-            if (enemy.shootTimer > 90) {
+            if (
+              currentDistance <=
+              config.shooterAttackRange &&
+              enemy.shootTimer >=
+              config.shooterProjectileCooldown
+            ) {
               enemy.shootTimer = 0;
 
-              createProjectile(enemy.graphic.x, enemy.graphic.y, angle, true);
+              createProjectile(
+                enemy.graphic.x,
+                enemy.graphic.y,
+                angle,
+                true,
+              );
             }
           }
         }
 
-        // TIMER
+        gameTimer += deltaSeconds;
 
-        gameTimer += deltaTime;
-
-        if (gameTimer >= 60) {
-          gameTimer = 0;
+        if (gameTimer >= 1) {
+          gameTimer -= 1;
           timeRemaining--;
 
-          timerText.text = `Tempo: ${timeRemaining}`;
+          timerText.text =
+            `Tempo: ${timeRemaining}`;
 
           if (timeRemaining <= 0) {
-            finishGame("Tempo esgotado.");
+            finishGame(
+              "O tempo acabou.",
+            );
           }
         }
 
-        // Reposição dos inimigos
+        enemySpawnTimer +=
+          deltaSeconds;
 
-        if (enemies.length < 3) {
-          createChaser();
+        if (
+          enemySpawnTimer >=
+          config.enemySpawnInterval
+        ) {
+          enemySpawnTimer -=
+            config.enemySpawnInterval;
+
+          if (Math.random() < 0.5) {
+            createChaser();
+          } else {
+            createShooter();
+          }
         }
       });
 
-      // =========================
-      // LIMPEZA
-      // =========================
-
       return () => {
-        window.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener(
+          "keydown",
+          handleKeyDown,
+        );
 
-        window.removeEventListener("keyup", handleKeyUp);
+        window.removeEventListener(
+          "keyup",
+          handleKeyUp,
+        );
 
-        window.removeEventListener("blur", handleBlur);
+        window.removeEventListener(
+          "blur",
+          handleBlur,
+        );
 
-        window.removeEventListener("start-game", startGame);
+        window.removeEventListener(
+          "start-game",
+          startGame,
+        );
 
         restartButton.removeAllListeners();
         menuButton.removeAllListeners();
@@ -942,12 +1152,17 @@ pixiApp.stage.setChildIndex(
     };
   }, []);
 
-  // =========================
-  // CARREGAR HISTÓRICO
-  // =========================
-
   useEffect(() => {
-    setHistory(getMatchHistory());
+    getHistory()
+      .then((results) => {
+        setHistory(results);
+      })
+      .catch((error) => {
+        console.error(
+          "Erro ao carregar histórico:",
+          error,
+        );
+      });
   }, []);
 
   return (
@@ -962,15 +1177,14 @@ pixiApp.stage.setChildIndex(
         justifyContent: "center",
       }}
     >
-      {/* MENU PRINCIPAL */}
-
       {showMenu && (
         <section
           style={{
             position: "fixed",
             inset: 0,
             zIndex: 10,
-            background: "linear-gradient(180deg, #07111d, #12304a)",
+            background:
+              "linear-gradient(180deg,#07111d,#12304a)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -999,9 +1213,11 @@ pixiApp.stage.setChildIndex(
           </p>
 
           <button
-            onClick={() => {
-              window.dispatchEvent(new Event("start-game"));
-            }}
+            onClick={() =>
+              window.dispatchEvent(
+                new Event("start-game"),
+              )
+            }
             style={{
               padding: "15px 50px",
               fontSize: 22,
@@ -1013,9 +1229,31 @@ pixiApp.stage.setChildIndex(
           </button>
 
           <button
+            onClick={() =>
+              setShowOptions(true)
+            }
+            style={{
+              padding: "10px 35px",
+              fontSize: 18,
+              cursor: "pointer",
+            }}
+          >
+            OPÇÕES
+          </button>
+
+          <button
             onClick={() => {
-              setHistory(getMatchHistory());
-              setShowHistory(true);
+              getHistory()
+                .then((results) => {
+                  setHistory(results);
+                  setShowHistory(true);
+                })
+                .catch((error) => {
+                  console.error(
+                    "Erro ao carregar histórico:",
+                    error,
+                  );
+                });
             }}
             style={{
               padding: "10px 35px",
@@ -1023,7 +1261,7 @@ pixiApp.stage.setChildIndex(
               cursor: "pointer",
             }}
           >
-            HISTÓRICO
+            HISTÓRICO DE PARTIDAS
           </button>
 
           <div
@@ -1032,23 +1270,48 @@ pixiApp.stage.setChildIndex(
               lineHeight: 1.7,
             }}
           >
-            <strong>Controles</strong>
+            <strong>
+              Controles
+            </strong>
 
-            <div>W / ↑ — mover</div>
-            <div>A / D — girar</div>
-            <div>Espaço — tiro frontal</div>
-            <div>Q — tiros laterais esquerdos</div>
-            <div>E — tiros laterais direitos</div>
-            <div>P — pausar</div>
+            <div>
+              W / ↑ — mover
+            </div>
+
+            <div>
+              A / D — girar
+            </div>
+
+            <div>
+              Espaço — tiro frontal
+            </div>
+
+            <div>
+              Q — tiros laterais à esquerda
+            </div>
+
+            <div>
+              E — tiros laterais à direita
+            </div>
+
+            <div>
+              P — pausar
+            </div>
           </div>
-
-          {/* RANKING */}
 
           <Ranking />
         </section>
       )}
 
-      {/* HISTÓRICO */}
+      {showOptions && (
+        <Options
+          config={gameConfig}
+          onSave={handleSaveConfig}
+          onBack={() =>
+            setShowOptions(false)
+          }
+        />
+      )}
 
       {showHistory && (
         <section
@@ -1064,10 +1327,14 @@ pixiApp.stage.setChildIndex(
             overflowY: "auto",
           }}
         >
-          <h2>HISTÓRICO DE PARTIDAS</h2>
+          <h2>
+            HISTÓRICO DE PARTIDAS
+          </h2>
 
           {history.length === 0 ? (
-            <p>Nenhuma partida registrada ainda.</p>
+            <p>
+              Nenhuma partida registrada.
+            </p>
           ) : (
             <div
               style={{
@@ -1075,50 +1342,69 @@ pixiApp.stage.setChildIndex(
                 maxWidth: 700,
               }}
             >
-              {history.map((result, index) => (
-                <div
-                  key={result.id}
-                  style={{
-                    border: "1px solid #345",
-                    borderRadius: 8,
-                    padding: 15,
-                    marginBottom: 10,
-                    background: "#102233",
-                  }}
-                >
-                  <strong>Partida #{index + 1}</strong>
-
-                  <div>Pontuação: {result.score}</div>
-
-                  <div>Duração: {result.duration}s</div>
-
-                  <div>Resultado: {result.reason}</div>
-
+              {history.map(
+                (result, index) => (
                   <div
+                    key={result.id}
                     style={{
-                      fontSize: 13,
-                      opacity: 0.7,
-                      marginTop: 5,
+                      border:
+                        "1px solid #345",
+                      borderRadius: 8,
+                      padding: 15,
+                      marginBottom: 10,
+                      background:
+                        "#102233",
                     }}
                   >
-                    {new Date(result.createdAt).toLocaleString("pt-BR")}
+                    <strong>
+                      Partida #{index + 1}
+                    </strong>
+
+                    <div>
+                      Pontuação:{" "}
+                      {result.score}
+                    </div>
+
+                    <div>
+                      Duração:{" "}
+                      {result.duration}s
+                    </div>
+
+                    <div>
+                      Resultado:{" "}
+                      {result.reason}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 13,
+                        opacity: 0.7,
+                        marginTop: 5,
+                      }}
+                    >
+                      {new Date(
+                        result.date,
+                      ).toLocaleString(
+                        "pt-BR",
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ),
+              )}
             </div>
           )}
 
           <button
-            onClick={() => {
-              setShowHistory(false);
-            }}
+            onClick={() =>
+              setShowHistory(false)
+            }
             style={{
               marginTop: 20,
               padding: "10px 30px",
               cursor: "pointer",
             }}
           >
-            VOLTAR AO MENU
+            MENU PRINCIPAL
           </button>
         </section>
       )}
