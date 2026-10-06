@@ -6,8 +6,24 @@ export type RankingEntry = {
   score: number;
 };
 
-export async function getRanking(): Promise<RankingEntry[]> {
-  const response = await api.get<RankingEntry[]>("/ranking");
+export type RankingResponse = {
+  data: RankingEntry[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+export async function getRanking(
+  page = 1,
+  pageSize = 5,
+): Promise<RankingResponse> {
+  const response = await api.get<RankingResponse>("/ranking", {
+    params: {
+      page,
+      pageSize,
+    },
+  });
 
   return response.data;
 }

@@ -9,8 +9,24 @@ export type MatchResult = {
   date: string;
 };
 
-export async function getHistory(): Promise<MatchResult[]> {
-  const response = await api.get<MatchResult[]>("/history");
+export type HistoryResponse = {
+  data: MatchResult[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+export async function getHistory(
+  page = 1,
+  pageSize = 5,
+): Promise<HistoryResponse> {
+  const response = await api.get<HistoryResponse>("/history", {
+    params: {
+      page,
+      pageSize,
+    },
+  });
 
   return response.data;
 }

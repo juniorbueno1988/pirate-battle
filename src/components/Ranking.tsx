@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { useRanking } from "../hooks/useRanking";
 
 export function Ranking() {
+  const [page, setPage] = useState(1);
+
   const {
     data,
     isLoading,
     isError,
-  } = useRanking();
+  } = useRanking(page, 5);
 
   if (isLoading) {
     return <p>Carregando ranking...</p>;
@@ -17,6 +20,10 @@ export function Ranking() {
         Não foi possível carregar o ranking.
       </p>
     );
+  }
+
+  if (!data) {
+    return null;
   }
 
   return (
@@ -41,7 +48,7 @@ export function Ranking() {
         🏆 Ranking
       </h2>
 
-      {!data || data.length === 0 ? (
+      {data.data.length === 0 ? (
         <p
           style={{
             textAlign: "center",
@@ -51,14 +58,43 @@ export function Ranking() {
           Nenhuma pontuação registrada ainda.
         </p>
       ) : (
-        <ol>
-          {data.map((player) => (
-            <li key={player.id}>
-              {player.player} —{" "}
-              {player.score} pontos
-            </li>
-          ))}
-        </ol>
+        <>
+          <ol>
+            {data.data.map((player) => (
+              <li key={player.id}>
+                {player.player} — {player.score} pontos
+              </li>
+            ))}
+          </ol>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "12px",
+              marginTop: "20px",
+            }}
+          >
+            <button
+              disabled={page === 1}
+              onClick={() => setPage((current) => current - 1)}
+            >
+              Anterior
+            </button>
+
+            <span>
+              Página {data.page} de {data.totalPages}
+            </span>
+
+            <button
+              disabled={page >= data.totalPages}
+              onClick={() => setPage((current) => current + 1)}
+            >
+              Próxima
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

@@ -1,17 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Application, Graphics, Text } from "pixi.js";
 import { Ranking } from "./components/Ranking";
 import { Options } from "./components/Options";
 import { submitScore } from "./api/ranking";
-import {
-  getHistory,
-  submitHistory,
-  type MatchResult,
-} from "./api/history";
-import {
-  defaultGameConfig,
-  type GameConfig,
-} from "./config/gameConfig";
+import { useHistory } from "./hooks/useHistory";
+import { submitHistory } from "./api/history";
+import { defaultGameConfig, type GameConfig } from "./config/gameConfig";
 const CONFIG_KEY = "pirate-battle-config";
 
 function getStoredGameConfig(): GameConfig {
@@ -35,11 +30,12 @@ function getStoredGameConfig(): GameConfig {
 }
 
 function App() {
+  const [historyPage, setHistoryPage] = useState(1);
+  const historyQuery = useHistory(historyPage, 5);
+  const queryClient = useQueryClient();
   const gameContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const gameConfigRef = useRef<GameConfig>(
-    getStoredGameConfig(),
-  );
+  const gameConfigRef = useRef<GameConfig>(getStoredGameConfig());
 
   const [gameConfig, setGameConfig] = useState<GameConfig>(
     getStoredGameConfig(),
@@ -48,14 +44,11 @@ function App() {
   const [showMenu, setShowMenu] = useState(true);
   const [showOptions, setShowOptions] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [history, setHistory] = useState<MatchResult[]>([]);
 
+  const history = historyQuery.data?.data ?? [];
   function handleSaveConfig(config: GameConfig) {
     try {
-      localStorage.setItem(
-        CONFIG_KEY,
-        JSON.stringify(config),
-      );
+      localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
 
       gameConfigRef.current = config;
       setGameConfig(config);
@@ -131,11 +124,7 @@ function App() {
       timerText.x = 20;
       timerText.y = 80;
 
-      pixiApp.stage.addChild(
-        healthText,
-        scoreText,
-        timerText,
-      );
+      pixiApp.stage.addChild(healthText, scoreText, timerText);
 
       const pauseText = new Text({
         text: "PAUSADO",
@@ -155,12 +144,10 @@ function App() {
 
       const gameOverBackground = new Graphics();
 
-      gameOverBackground
-        .rect(150, 110, 500, 390)
-        .fill({
-          color: 0x000000,
-          alpha: 0.9,
-        });
+      gameOverBackground.rect(150, 110, 500, 390).fill({
+        color: 0x000000,
+        alpha: 0.9,
+      });
 
       gameOverBackground.visible = false;
 
@@ -214,9 +201,7 @@ function App() {
 
       const restartButton = new Graphics();
 
-      restartButton
-        .roundRect(270, 320, 260, 60, 10)
-        .fill(0x1976d2);
+      restartButton.roundRect(270, 320, 260, 60, 10).fill(0x1976d2);
 
       restartButton.eventMode = "static";
       restartButton.cursor = "pointer";
@@ -242,9 +227,7 @@ function App() {
 
       const menuButton = new Graphics();
 
-      menuButton
-        .roundRect(270, 400, 260, 60, 10)
-        .fill(0x455a64);
+      menuButton.roundRect(270, 400, 260, 60, 10).fill(0x455a64);
 
       menuButton.eventMode = "static";
       menuButton.cursor = "pointer";
@@ -285,11 +268,7 @@ function App() {
 
       const islands: Graphics[] = [];
 
-      function createIsland(
-        x: number,
-        y: number,
-        radius: number,
-      ) {
+      function createIsland(x: number, y: number, radius: number) {
         const island = new Graphics();
 
         island.circle(0, 0, radius).fill(0x4f6f3f);
@@ -361,9 +340,7 @@ function App() {
 
         const enemyGraphic = new Graphics();
 
-        enemyGraphic
-          .circle(0, 0, 18)
-          .fill(0xff3333);
+        enemyGraphic.circle(0, 0, 18).fill(0xff3333);
 
         enemyGraphic.x = Math.random() * 700 + 50;
         enemyGraphic.y = Math.random() * 300 + 50;
@@ -385,9 +362,7 @@ function App() {
 
         const enemyGraphic = new Graphics();
 
-        enemyGraphic
-          .circle(0, 0, 18)
-          .fill(0xff8800);
+        enemyGraphic.circle(0, 0, 18).fill(0xff8800);
 
         enemyGraphic.x = Math.random() * 700 + 50;
         enemyGraphic.y = Math.random() * 300 + 50;
@@ -410,9 +385,7 @@ function App() {
 
       const keys: Record<string, boolean> = {};
 
-      const handleKeyDown = (
-        event: KeyboardEvent,
-      ) => {
+      const handleKeyDown = (event: KeyboardEvent) => {
         keys[event.key.toLowerCase()] = true;
 
         if (event.key.toLowerCase() === "p") {
@@ -427,9 +400,7 @@ function App() {
         }
       };
 
-      const handleKeyUp = (
-        event: KeyboardEvent,
-      ) => {
+      const handleKeyUp = (event: KeyboardEvent) => {
         keys[event.key.toLowerCase()] = false;
       };
 
@@ -440,47 +411,23 @@ function App() {
         }
       };
 
-      window.addEventListener(
-        "keydown",
-        handleKeyDown,
-      );
+      window.addEventListener("keydown", handleKeyDown);
 
-      window.addEventListener(
-        "keyup",
-        handleKeyUp,
-      );
+      window.addEventListener("keyup", handleKeyUp);
 
-      window.addEventListener(
-        "blur",
-        handleBlur,
-      );
+      window.addEventListener("blur", handleBlur);
 
-      function distance(
-        x1: number,
-        y1: number,
-        x2: number,
-        y2: number,
-      ) {
+      function distance(x1: number, y1: number, x2: number, y2: number) {
         const dx = x1 - x2;
         const dy = y1 - y2;
 
         return Math.sqrt(dx * dx + dy * dy);
       }
 
-      function collidesWithIsland(
-        x: number,
-        y: number,
-        radius: number,
-      ) {
+      function collidesWithIsland(x: number, y: number, radius: number) {
         return islands.some(
           (island) =>
-            distance(
-              x,
-              y,
-              island.x,
-              island.y,
-            ) <
-            radius + island.width / 2,
+            distance(x, y, island.x, island.y) < radius + island.width / 2,
         );
       }
 
@@ -494,8 +441,7 @@ function App() {
         gameOver = true;
         paused = false;
 
-        const duration =
-          config.sessionDuration - timeRemaining;
+        const duration = config.sessionDuration - timeRemaining;
 
         finalScoreText.text = `Pontuação: ${score}`;
         gameOverReasonText.text = reason;
@@ -559,28 +505,21 @@ function App() {
         };
 
         submitHistory(result)
-          .then((savedResult) => {
-            setHistory((currentHistory) => [
-              savedResult,
-              ...currentHistory,
-            ]);
+          .then(() => {
+            queryClient.invalidateQueries({
+              queryKey: ["history"],
+            });
+
+            queryClient.invalidateQueries({
+              queryKey: ["ranking"],
+            });
           })
-          .catch((error) =>
-            console.error(
-              "Erro ao salvar histórico:",
-              error,
-            ),
-          );
+
+          .catch((error) => console.error("Erro ao salvar histórico:", error));
 
         if (score > 0) {
-          submitScore(
-            "Captain Bueno",
-            score,
-          ).catch((error) =>
-            console.error(
-              "Erro ao enviar pontuação:",
-              error,
-            ),
+          submitScore("Captain Bueno", score).catch((error) =>
+            console.error("Erro ao enviar pontuação:", error),
           );
         }
       }
@@ -670,22 +609,13 @@ function App() {
         setShowOptions(false);
       }
 
-      restartButton.on(
-        "pointerdown",
-        () => resetGame(),
-      );
+      restartButton.on("pointerdown", () => resetGame());
 
-      menuButton.on(
-        "pointerdown",
-        () => returnToMenu(),
-      );
+      menuButton.on("pointerdown", () => returnToMenu());
 
       const startGame = () => resetGame();
 
-      window.addEventListener(
-        "start-game",
-        startGame,
-      );
+      window.addEventListener("start-game", startGame);
 
       pixiApp.ticker.add((ticker) => {
         if (gameOver || paused) {
@@ -695,63 +625,37 @@ function App() {
         const config = gameConfigRef.current;
 
         const deltaTime = ticker.deltaTime;
-        const deltaSeconds =
-          ticker.deltaMS / 1000;
+        const deltaSeconds = ticker.deltaMS / 1000;
 
-        const rotationSpeed =
-          config.playerRotationSpeed;
+        const rotationSpeed = config.playerRotationSpeed;
 
-        const movementSpeed =
-          config.playerSpeed;
+        const movementSpeed = config.playerSpeed;
 
-        if (
-          keys["arrowleft"] ||
-          keys["a"]
-        ) {
-          player.rotation -=
-            rotationSpeed * deltaTime;
+        if (keys["arrowleft"] || keys["a"]) {
+          player.rotation -= rotationSpeed * deltaTime;
         }
 
-        if (
-          keys["arrowright"] ||
-          keys["d"]
-        ) {
-          player.rotation +=
-            rotationSpeed * deltaTime;
+        if (keys["arrowright"] || keys["d"]) {
+          player.rotation += rotationSpeed * deltaTime;
         }
 
         let moveX = 0;
         let moveY = 0;
 
-        if (
-          keys["arrowup"] ||
-          keys["w"]
-        ) {
-          moveX =
-            Math.sin(player.rotation) *
-            movementSpeed *
-            deltaTime;
+        if (keys["arrowup"] || keys["w"]) {
+          moveX = Math.sin(player.rotation) * movementSpeed * deltaTime;
 
-          moveY =
-            -Math.cos(player.rotation) *
-            movementSpeed *
-            deltaTime;
+          moveY = -Math.cos(player.rotation) * movementSpeed * deltaTime;
         }
 
-        const nextPlayerX =
-          player.x + moveX;
+        const nextPlayerX = player.x + moveX;
 
-        const nextPlayerY =
-          player.y + moveY;
+        const nextPlayerY = player.y + moveY;
 
         if (
           nextPlayerX > 20 &&
           nextPlayerX < 780 &&
-          !collidesWithIsland(
-            nextPlayerX,
-            player.y,
-            20,
-          )
+          !collidesWithIsland(nextPlayerX, player.y, 20)
         ) {
           player.x = nextPlayerX;
         }
@@ -759,11 +663,7 @@ function App() {
         if (
           nextPlayerY > 20 &&
           nextPlayerY < 580 &&
-          !collidesWithIsland(
-            player.x,
-            nextPlayerY,
-            20,
-          )
+          !collidesWithIsland(player.x, nextPlayerY, 20)
         ) {
           player.y = nextPlayerY;
         }
@@ -771,65 +671,35 @@ function App() {
         if (keys[" "]) {
           keys[" "] = false;
 
-          createProjectile(
-            player.x,
-            player.y,
-            player.rotation -
-            Math.PI / 2,
-          );
+          createProjectile(player.x, player.y, player.rotation - Math.PI / 2);
         }
 
         if (keys["q"]) {
           keys["q"] = false;
 
-          const sideAngle =
-            player.rotation - Math.PI;
+          const sideAngle = player.rotation - Math.PI;
 
-          for (
-            let i = -1;
-            i <= 1;
-            i++
-          ) {
-            createProjectile(
-              player.x,
-              player.y,
-              sideAngle + i * 0.08,
-            );
+          for (let i = -1; i <= 1; i++) {
+            createProjectile(player.x, player.y, sideAngle + i * 0.08);
           }
         }
 
         if (keys["e"]) {
           keys["e"] = false;
 
-          const sideAngle =
-            player.rotation;
+          const sideAngle = player.rotation;
 
-          for (
-            let i = -1;
-            i <= 1;
-            i++
-          ) {
-            createProjectile(
-              player.x,
-              player.y,
-              sideAngle + i * 0.08,
-            );
+          for (let i = -1; i <= 1; i++) {
+            createProjectile(player.x, player.y, sideAngle + i * 0.08);
           }
         }
 
-        for (
-          let i = projectiles.length - 1;
-          i >= 0;
-          i--
-        ) {
-          const projectile =
-            projectiles[i];
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+          const projectile = projectiles[i];
 
-          projectile.graphic.x +=
-            projectile.vx * deltaTime;
+          projectile.graphic.x += projectile.vx * deltaTime;
 
-          projectile.graphic.y +=
-            projectile.vy * deltaTime;
+          projectile.graphic.y += projectile.vy * deltaTime;
 
           if (
             projectile.graphic.x < -20 ||
@@ -843,11 +713,7 @@ function App() {
           }
 
           if (
-            collidesWithIsland(
-              projectile.graphic.x,
-              projectile.graphic.y,
-              5,
-            )
+            collidesWithIsland(projectile.graphic.x, projectile.graphic.y, 5)
           ) {
             projectile.graphic.destroy();
             projectiles.splice(i, 1);
@@ -865,19 +731,13 @@ function App() {
             ) {
               health -= config.shooterDamage;
 
-              healthText.text =
-                `Vida: ${Math.max(
-                  health,
-                  0,
-                )}`;
+              healthText.text = `Vida: ${Math.max(health, 0)}`;
 
               projectile.graphic.destroy();
               projectiles.splice(i, 1);
 
               if (health <= 0) {
-                finishGame(
-                  "Seu navio foi destruído.",
-                );
+                finishGame("Seu navio foi destruído.");
               }
 
               continue;
@@ -886,13 +746,11 @@ function App() {
             let hitEnemy = false;
 
             for (
-              let enemyIndex =
-                enemies.length - 1;
+              let enemyIndex = enemies.length - 1;
               enemyIndex >= 0;
               enemyIndex--
             ) {
-              const enemy =
-                enemies[enemyIndex];
+              const enemy = enemies[enemyIndex];
 
               if (
                 distance(
@@ -902,8 +760,7 @@ function App() {
                   enemy.graphic.y,
                 ) < 23
               ) {
-                enemy.health -=
-                  config.playerProjectileDamage;
+                enemy.health -= config.playerProjectileDamage;
 
                 projectile.graphic.destroy();
                 projectiles.splice(i, 1);
@@ -911,15 +768,11 @@ function App() {
                 if (enemy.health <= 0) {
                   enemy.graphic.destroy();
 
-                  enemies.splice(
-                    enemyIndex,
-                    1,
-                  );
+                  enemies.splice(enemyIndex, 1);
 
                   score++;
 
-                  scoreText.text =
-                    `Pontuação: ${score}`;
+                  scoreText.text = `Pontuação: ${score}`;
                 }
 
                 hitEnemy = true;
@@ -934,150 +787,84 @@ function App() {
         }
 
         for (
-          let enemyIndex =
-            enemies.length - 1;
+          let enemyIndex = enemies.length - 1;
           enemyIndex >= 0;
           enemyIndex--
         ) {
-          const enemy =
-            enemies[enemyIndex];
+          const enemy = enemies[enemyIndex];
 
-          const dx =
-            player.x -
-            enemy.graphic.x;
+          const dx = player.x - enemy.graphic.x;
 
-          const dy =
-            player.y -
-            enemy.graphic.y;
+          const dy = player.y - enemy.graphic.y;
 
-          const angle =
-            Math.atan2(dy, dx);
+          const angle = Math.atan2(dy, dx);
 
-          enemy.graphic.rotation =
-            angle;
+          enemy.graphic.rotation = angle;
 
-          if (
-            enemy.type === "chaser"
-          ) {
+          if (enemy.type === "chaser") {
             const nextX =
-              enemy.graphic.x +
-              Math.cos(angle) *
-              enemy.speed *
-              deltaTime;
+              enemy.graphic.x + Math.cos(angle) * enemy.speed * deltaTime;
 
             const nextY =
-              enemy.graphic.y +
-              Math.sin(angle) *
-              enemy.speed *
-              deltaTime;
+              enemy.graphic.y + Math.sin(angle) * enemy.speed * deltaTime;
 
-            if (
-              !collidesWithIsland(
-                nextX,
-                nextY,
-                18,
-              )
-            ) {
-              enemy.graphic.x =
-                nextX;
+            if (!collidesWithIsland(nextX, nextY, 18)) {
+              enemy.graphic.x = nextX;
 
-              enemy.graphic.y =
-                nextY;
+              enemy.graphic.y = nextY;
             }
 
             if (
-              distance(
-                enemy.graphic.x,
-                enemy.graphic.y,
-                player.x,
-                player.y,
-              ) < 35
+              distance(enemy.graphic.x, enemy.graphic.y, player.x, player.y) <
+              35
             ) {
-              health -=
-                config.chaserDamage;
+              health -= config.chaserDamage;
 
-              healthText.text =
-                `Vida: ${Math.max(
-                  health,
-                  0,
-                )}`;
+              healthText.text = `Vida: ${Math.max(health, 0)}`;
 
               enemy.graphic.destroy();
 
-              enemies.splice(
-                enemyIndex,
-                1,
-              );
+              enemies.splice(enemyIndex, 1);
 
               if (health <= 0) {
-                finishGame(
-                  "Seu navio foi destruído.",
-                );
+                finishGame("Seu navio foi destruído.");
               }
 
               continue;
             }
           }
 
-          if (
-            enemy.type === "shooter"
-          ) {
-            const currentDistance =
-              distance(
-                enemy.graphic.x,
-                enemy.graphic.y,
-                player.x,
-                player.y,
-              );
+          if (enemy.type === "shooter") {
+            const currentDistance = distance(
+              enemy.graphic.x,
+              enemy.graphic.y,
+              player.x,
+              player.y,
+            );
 
-            if (
-              currentDistance >
-              config.shooterAttackRange
-            ) {
+            if (currentDistance > config.shooterAttackRange) {
               const nextX =
-                enemy.graphic.x +
-                Math.cos(angle) *
-                enemy.speed *
-                deltaTime;
+                enemy.graphic.x + Math.cos(angle) * enemy.speed * deltaTime;
 
               const nextY =
-                enemy.graphic.y +
-                Math.sin(angle) *
-                enemy.speed *
-                deltaTime;
+                enemy.graphic.y + Math.sin(angle) * enemy.speed * deltaTime;
 
-              if (
-                !collidesWithIsland(
-                  nextX,
-                  nextY,
-                  18,
-                )
-              ) {
-                enemy.graphic.x =
-                  nextX;
+              if (!collidesWithIsland(nextX, nextY, 18)) {
+                enemy.graphic.x = nextX;
 
-                enemy.graphic.y =
-                  nextY;
+                enemy.graphic.y = nextY;
               }
             }
 
-            enemy.shootTimer +=
-              deltaSeconds;
+            enemy.shootTimer += deltaSeconds;
 
             if (
-              currentDistance <=
-              config.shooterAttackRange &&
-              enemy.shootTimer >=
-              config.shooterProjectileCooldown
+              currentDistance <= config.shooterAttackRange &&
+              enemy.shootTimer >= config.shooterProjectileCooldown
             ) {
               enemy.shootTimer = 0;
 
-              createProjectile(
-                enemy.graphic.x,
-                enemy.graphic.y,
-                angle,
-                true,
-              );
+              createProjectile(enemy.graphic.x, enemy.graphic.y, angle, true);
             }
           }
         }
@@ -1088,25 +875,17 @@ function App() {
           gameTimer -= 1;
           timeRemaining--;
 
-          timerText.text =
-            `Tempo: ${timeRemaining}`;
+          timerText.text = `Tempo: ${timeRemaining}`;
 
           if (timeRemaining <= 0) {
-            finishGame(
-              "O tempo acabou.",
-            );
+            finishGame("O tempo acabou.");
           }
         }
 
-        enemySpawnTimer +=
-          deltaSeconds;
+        enemySpawnTimer += deltaSeconds;
 
-        if (
-          enemySpawnTimer >=
-          config.enemySpawnInterval
-        ) {
-          enemySpawnTimer -=
-            config.enemySpawnInterval;
+        if (enemySpawnTimer >= config.enemySpawnInterval) {
+          enemySpawnTimer -= config.enemySpawnInterval;
 
           if (Math.random() < 0.5) {
             createChaser();
@@ -1117,25 +896,13 @@ function App() {
       });
 
       return () => {
-        window.removeEventListener(
-          "keydown",
-          handleKeyDown,
-        );
+        window.removeEventListener("keydown", handleKeyDown);
 
-        window.removeEventListener(
-          "keyup",
-          handleKeyUp,
-        );
+        window.removeEventListener("keyup", handleKeyUp);
 
-        window.removeEventListener(
-          "blur",
-          handleBlur,
-        );
+        window.removeEventListener("blur", handleBlur);
 
-        window.removeEventListener(
-          "start-game",
-          startGame,
-        );
+        window.removeEventListener("start-game", startGame);
 
         restartButton.removeAllListeners();
         menuButton.removeAllListeners();
@@ -1150,19 +917,6 @@ function App() {
       destroyed = true;
       pixiApp.destroy(true);
     };
-  }, []);
-
-  useEffect(() => {
-    getHistory()
-      .then((results) => {
-        setHistory(results);
-      })
-      .catch((error) => {
-        console.error(
-          "Erro ao carregar histórico:",
-          error,
-        );
-      });
   }, []);
 
   return (
@@ -1183,8 +937,7 @@ function App() {
             position: "fixed",
             inset: 0,
             zIndex: 10,
-            background:
-              "linear-gradient(180deg,#07111d,#12304a)",
+            background: "linear-gradient(180deg,#07111d,#12304a)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -1213,11 +966,7 @@ function App() {
           </p>
 
           <button
-            onClick={() =>
-              window.dispatchEvent(
-                new Event("start-game"),
-              )
-            }
+            onClick={() => window.dispatchEvent(new Event("start-game"))}
             style={{
               padding: "15px 50px",
               fontSize: 22,
@@ -1229,9 +978,7 @@ function App() {
           </button>
 
           <button
-            onClick={() =>
-              setShowOptions(true)
-            }
+            onClick={() => setShowOptions(true)}
             style={{
               padding: "10px 35px",
               fontSize: 18,
@@ -1243,17 +990,7 @@ function App() {
 
           <button
             onClick={() => {
-              getHistory()
-                .then((results) => {
-                  setHistory(results);
-                  setShowHistory(true);
-                })
-                .catch((error) => {
-                  console.error(
-                    "Erro ao carregar histórico:",
-                    error,
-                  );
-                });
+              setShowHistory(true);
             }}
             style={{
               padding: "10px 35px",
@@ -1270,33 +1007,19 @@ function App() {
               lineHeight: 1.7,
             }}
           >
-            <strong>
-              Controles
-            </strong>
+            <strong>Controles</strong>
 
-            <div>
-              W / ↑ — mover
-            </div>
+            <div>W / ↑ — mover</div>
 
-            <div>
-              A / D — girar
-            </div>
+            <div>A / D — girar</div>
 
-            <div>
-              Espaço — tiro frontal
-            </div>
+            <div>Espaço — tiro frontal</div>
 
-            <div>
-              Q — tiros laterais à esquerda
-            </div>
+            <div>Q — tiros laterais à esquerda</div>
 
-            <div>
-              E — tiros laterais à direita
-            </div>
+            <div>E — tiros laterais à direita</div>
 
-            <div>
-              P — pausar
-            </div>
+            <div>P — pausar</div>
           </div>
 
           <Ranking />
@@ -1307,9 +1030,7 @@ function App() {
         <Options
           config={gameConfig}
           onSave={handleSaveConfig}
-          onBack={() =>
-            setShowOptions(false)
-          }
+          onBack={() => setShowOptions(false)}
         />
       )}
 
@@ -1327,53 +1048,36 @@ function App() {
             overflowY: "auto",
           }}
         >
-          <h2>
-            HISTÓRICO DE PARTIDAS
-          </h2>
+          <h2>HISTÓRICO DE PARTIDAS</h2>
 
           {history.length === 0 ? (
-            <p>
-              Nenhuma partida registrada.
-            </p>
+            <p>Nenhuma partida registrada.</p>
           ) : (
-            <div
-              style={{
-                width: "100%",
-                maxWidth: 700,
-              }}
-            >
-              {history.map(
-                (result, index) => (
+            <>
+              <div
+                style={{
+                  width: "100%",
+                  maxWidth: 700,
+                }}
+              >
+                {history.map((result, index) => (
                   <div
                     key={result.id}
                     style={{
-                      border:
-                        "1px solid #345",
+                      border: "1px solid #345",
                       borderRadius: 8,
                       padding: 15,
                       marginBottom: 10,
-                      background:
-                        "#102233",
+                      background: "#102233",
                     }}
                   >
                     <strong>
-                      Partida #{index + 1}
+                      Partida #{(historyPage - 1) * 5 + index + 1}
                     </strong>
 
-                    <div>
-                      Pontuação:{" "}
-                      {result.score}
-                    </div>
-
-                    <div>
-                      Duração:{" "}
-                      {result.duration}s
-                    </div>
-
-                    <div>
-                      Resultado:{" "}
-                      {result.reason}
-                    </div>
+                    <div>Pontuação: {result.score}</div>
+                    <div>Duração: {result.duration}s</div>
+                    <div>Resultado: {result.reason}</div>
 
                     <div
                       style={{
@@ -1382,22 +1086,47 @@ function App() {
                         marginTop: 5,
                       }}
                     >
-                      {new Date(
-                        result.date,
-                      ).toLocaleString(
-                        "pt-BR",
-                      )}
+                      {new Date(result.date).toLocaleString("pt-BR")}
                     </div>
                   </div>
-                ),
-              )}
-            </div>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  marginTop: 10,
+                }}
+              >
+                <button
+                  disabled={historyPage === 1}
+                  onClick={() => setHistoryPage((current) => current - 1)}
+                >
+                  Anterior
+                </button>
+
+                <span>
+                  Página {historyQuery.data?.page ?? historyPage} de{" "}
+                  {historyQuery.data?.totalPages ?? 1}
+                </span>
+
+                <button
+                  disabled={historyPage >= (historyQuery.data?.totalPages ?? 1)}
+                  onClick={() => setHistoryPage((current) => current + 1)}
+                >
+                  Próxima
+                </button>
+              </div>
+            </>
           )}
 
           <button
-            onClick={() =>
-              setShowHistory(false)
-            }
+            onClick={() => {
+              setShowHistory(false);
+              setHistoryPage(1);
+            }}
             style={{
               marginTop: 20,
               padding: "10px 30px",
