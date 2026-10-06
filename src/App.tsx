@@ -486,6 +486,45 @@ function App() {
 
         menuButton.visible = true;
         menuText.visible = true;
+        pixiApp.stage.setChildIndex(
+  gameOverBackground,
+  pixiApp.stage.children.length - 1,
+);
+
+pixiApp.stage.setChildIndex(
+  gameOverTitle,
+  pixiApp.stage.children.length - 1,
+);
+
+pixiApp.stage.setChildIndex(
+  finalScoreText,
+  pixiApp.stage.children.length - 1,
+);
+
+pixiApp.stage.setChildIndex(
+  gameOverReasonText,
+  pixiApp.stage.children.length - 1,
+);
+
+pixiApp.stage.setChildIndex(
+  restartButton,
+  pixiApp.stage.children.length - 1,
+);
+
+pixiApp.stage.setChildIndex(
+  restartText,
+  pixiApp.stage.children.length - 1,
+);
+
+pixiApp.stage.setChildIndex(
+  menuButton,
+  pixiApp.stage.children.length - 1,
+);
+
+pixiApp.stage.setChildIndex(
+  menuText,
+  pixiApp.stage.children.length - 1,
+);
 
         const result: MatchResult = {
           id: Date.now().toString(),
