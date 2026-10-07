@@ -27,12 +27,14 @@ O projeto foi desenvolvido para execução diretamente no navegador.
 * Tela inicial
 * Tela de resultado
 * Reinício de partida
-* Histórico local de partidas
+* Histórico de partidas
 * Ranking
-* Persistência local do histórico
-* Integração de API utilizando Axios
-* Dados de ranking simulados com MSW
+* Persistência das configurações no `localStorage`
+* Integração com API utilizando Axios
+* Gerenciamento de dados com TanStack Query
+* API simulada com MSW
 * Testes E2E com Playwright
+* Teste de regressão visual com Playwright
 
 ## 🛠️ Tecnologias
 
@@ -70,27 +72,39 @@ pirate-battle/
 │
 ├── src/
 │   ├── api/
-│   │   ├── api.ts
+│   │   ├── http.ts
+│   │   ├── history.ts
 │   │   └── ranking.ts
 │   │
 │   ├── components/
+│   │   ├── History.tsx
+│   │   ├── Options.tsx
 │   │   └── Ranking.tsx
 │   │
+│   ├── config/
+│   │   └── gameConfig.ts
+│   │
 │   ├── hooks/
+│   │   ├── useHistory.ts
 │   │   └── useRanking.ts
 │   │
 │   ├── mocks/
+│   │   ├── browser.ts
 │   │   └── handlers.ts
-│   │
-│   ├── testes/
-│   │   └── game.spec.ts
 │   │
 │   ├── App.tsx
 │   ├── main.tsx
 │   └── index.css
 │
+├── tests/
+│   ├── api-error.spec.ts
+│   ├── main-menu.spec.ts
+│   ├── options.spec.ts
+│   └── visual.spec.ts
+│
 ├── ARCHITECTURE.md
 ├── package.json
+├── playwright.config.ts
 ├── tsconfig.json
 └── vite.config.ts
 ```
@@ -129,15 +143,15 @@ http://localhost:5173
 
 ## 🎯 Controles
 
-| Ação                     | Controle       |
-| ------------------------ | -------------- |
-| Avançar                  | `W` ou `↑`     |
-| Girar para esquerda      | `A` ou `←`     |
-| Girar para direita       | `D` ou `→`     |
-| Disparo frontal          | `Espaço`       |
-| Disparo lateral esquerdo | `Q`            |
-| Disparo lateral direito  | `E`            |
-| Pausar                   | Botão de pausa |
+| Ação                     | Controle   |
+| ------------------------ | ---------- |
+| Avançar                  | `W` ou `↑` |
+| Girar para esquerda      | `A` ou `←` |
+| Girar para direita       | `D` ou `→` |
+| Disparo frontal          | `Espaço`   |
+| Disparo lateral esquerdo | `Q`        |
+| Disparo lateral direito  | `E`        |
+| Pausar                   | `P`        |
 
 ## ⚔️ Gameplay
 
@@ -157,11 +171,11 @@ Ataca o jogador à distância utilizando projéteis.
 
 O jogador precisa evitar inimigos, obstáculos e projéteis enquanto tenta conseguir a maior pontuação possível.
 
-Cada inimigo destruído adiciona pontos à pontuação da partida.
+Cada inimigo destruído aumenta a pontuação da partida.
 
 ## 🧱 Colisões
 
-O jogo possui tratamento de colisões entre diferentes entidades:
+O jogo possui tratamento de colisões entre diferentes entidades, incluindo:
 
 * Jogador × inimigos
 * Jogador × ilhas
@@ -169,7 +183,7 @@ O jogo possui tratamento de colisões entre diferentes entidades:
 * Projéteis inimigos × jogador
 * Projéteis × obstáculos
 
-As colisões influenciam diretamente a vida e o resultado da partida.
+As colisões influenciam diretamente a vida do jogador e o resultado da partida.
 
 ## ⏱️ Partida
 
@@ -180,8 +194,8 @@ Durante a partida:
 * O cronômetro é atualizado em tempo real.
 * A pontuação é atualizada conforme os inimigos são destruídos.
 * A vida do jogador é exibida na interface.
-* A partida pode ser pausada.
-* O jogo pausa automaticamente quando a janela perde o foco.
+* A partida pode ser pausada manualmente.
+* O jogo pausa automaticamente quando a janela perde foco.
 
 Ao finalizar, o jogador recebe uma tela de resultado contendo as informações da partida.
 
@@ -190,38 +204,82 @@ Ao finalizar, o jogador recebe uma tela de resultado contendo as informações d
 O ranking utiliza:
 
 * Axios para comunicação HTTP
-* TanStack Query para gerenciamento dos dados
+* TanStack Query para gerenciamento das requisições assíncronas
 * MSW para simulação da API
 
-O fluxo foi estruturado para permitir posteriormente a substituição do mock por uma API real sem alterar a camada de apresentação.
+O ranking possui paginação e os dados são ordenados pela pontuação.
+
+A camada de API foi separada da interface para permitir posteriormente a substituição do mock por um backend real sem alterar significativamente os componentes de apresentação.
+
+## 📜 Histórico de partidas
+
+O histórico registra os resultados das partidas e apresenta informações como:
+
+* Jogador
+* Pontuação
+* Duração
+* Motivo do encerramento
+* Data da partida
+
+O histórico possui paginação e utiliza a camada de API simulada pelo MSW.
+
+## ⚙️ Opções
+
+A aplicação possui uma tela de configurações que permite alterar parâmetros da partida, incluindo:
+
+* Duração da partida
+* Intervalo de surgimento dos inimigos
+
+As configurações são persistidas utilizando `localStorage`, permanecendo disponíveis após o recarregamento da página.
 
 ## 💾 Persistência local
 
-O histórico das partidas é armazenado utilizando `localStorage`.
+O projeto utiliza `localStorage` para persistir configurações da partida.
 
-Isso permite que os resultados permaneçam disponíveis mesmo após recarregar a página.
+Os dados utilizados pelo frontend são mantidos através das camadas de API e MSW durante a execução da aplicação.
 
 ## 🧪 Testes
 
-O projeto utiliza Playwright para testes End-to-End.
+O projeto utiliza **Playwright** para testes End-to-End e regressão visual.
 
 Para executar os testes:
 
 ```bash
-npx playwright test
+npm run test:e2e
 ```
 
 Os testes atuais verificam:
 
 * Carregamento da aplicação
-* Exibição do título do jogo
-* Existência do botão de início
+* Exibição do menu principal
+* Existência dos principais botões
 * Inicialização de uma partida
+* Abertura da tela de opções
+* Abertura do ranking
+* Abertura do histórico
+* Persistência das opções após recarregar a página
+* Simulação de erro HTTP 500 no ranking
+* Regressão visual do menu principal
 
 Resultado atual:
 
 ```text
-2 passed
+8 passed
+```
+
+### Regressão visual
+
+O Playwright também mantém um snapshot visual do menu principal:
+
+```text
+tests/visual.spec.ts-snapshots/
+└── main-menu-chromium-win32.png
+```
+
+Para atualizar os snapshots:
+
+```bash
+npm run test:e2e:update
 ```
 
 ## 🏗️ Build de produção
@@ -250,7 +308,7 @@ npm run lint
 
 ### React
 
-Utilizado para estruturar a interface, menus, HUD, ranking e telas relacionadas ao fluxo da aplicação.
+Utilizado para estruturar a interface, menus, HUD, ranking, histórico, opções e telas relacionadas ao fluxo da aplicação.
 
 ### PixiJS
 
@@ -264,7 +322,7 @@ Utilizado para tipagem estática e maior segurança durante o desenvolvimento.
 
 ### TanStack Query
 
-Responsável pelo gerenciamento do estado assíncrono relacionado aos dados do ranking.
+Responsável pelo gerenciamento do estado assíncrono relacionado ao ranking e histórico.
 
 ### Axios
 
@@ -272,11 +330,11 @@ Centraliza as requisições HTTP utilizadas pela aplicação.
 
 ### MSW
 
-Permite simular as respostas da API durante o desenvolvimento sem depender de um backend externo.
+Permite simular as respostas da API durante o desenvolvimento e os testes sem depender de um backend externo.
 
 ### Playwright
 
-Utilizado para validar os principais fluxos da aplicação diretamente no navegador.
+Utilizado para validar os principais fluxos da aplicação diretamente no navegador, incluindo testes funcionais, persistência, tratamento de erro e regressão visual.
 
 ## 📐 Arquitetura
 
@@ -284,23 +342,31 @@ As principais responsabilidades foram separadas entre:
 
 ```text
 React
-  ↓
-Interface / Menus / Ranking
-  ↓
+  │
+  ├── Interface / Menus / HUD
+  ├── Ranking
+  ├── Histórico
+  └── Opções
+       │
+       ▼
 TanStack Query
-  ↓
+       │
+       ▼
 Axios
-  ↓
+       │
+       ▼
 API / MSW
 ```
 
-Enquanto o gameplay segue uma camada independente:
+Enquanto o gameplay segue uma estrutura independente:
 
 ```text
 React
-  ↓
+  │
+  ▼
 PixiJS
-  ↓
+  │
+  ▼
 Game Loop
   ├── Player
   ├── Enemies
@@ -310,11 +376,7 @@ Game Loop
   └── Score / Health / Timer
 ```
 
-Mais detalhes sobre as decisões arquiteturais estão documentados em:
-
-```text
-ARCHITECTURE.md
-```
+Mais detalhes sobre as decisões arquiteturais estão documentados em `ARCHITECTURE.md`.
 
 ## 📌 Objetivo do projeto
 
@@ -328,14 +390,17 @@ O objetivo deste projeto foi demonstrar conhecimentos práticos de desenvolvimen
 * Mock de APIs
 * Persistência local
 * Testes End-to-End
+* Testes de regressão visual
 * Organização de código
 * Desenvolvimento de uma aplicação frontend completa
+
+O projeto foi desenvolvido com auxílio de ferramentas de Inteligência Artificial durante o processo de implementação, revisão e aprendizado.
 
 ## 👨‍💻 Autor
 
 **Edílson José Bueno Júnior**
 
-Frontend Developer em transição de carreira, com experiência profissional em suporte de TI e desenvolvimento de projetos utilizando tecnologias modernas de frontend. Para criação do projeto foi utilizado inteligência artifical para o auxilio.
+Frontend Developer em transição de carreira, com experiência profissional em suporte de TI e desenvolvimento de projetos utilizando tecnologias modernas de frontend.
 
 ### Links
 

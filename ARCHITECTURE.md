@@ -6,12 +6,12 @@ O Pirate Battle utiliza uma arquitetura híbrida combinando **React** para a int
 
 A separação permite que cada tecnologia seja utilizada na responsabilidade em que apresenta maior vantagem:
 
-* **React:** menus, telas, HUD, ranking e fluxo da aplicação.
+* **React:** menus, telas, HUD, ranking, histórico e opções.
 * **PixiJS:** renderização, game loop, movimentação, colisões, inimigos e projéteis.
-* **TanStack Query:** gerenciamento das requisições assíncronas.
+* **TanStack Query:** gerenciamento das requisições e estado assíncrono.
 * **Axios:** comunicação HTTP.
-* **MSW:** simulação da API durante o desenvolvimento.
-* **Playwright:** testes End-to-End.
+* **MSW:** simulação da API.
+* **Playwright:** testes E2E e regressão visual.
 
 Visão simplificada:
 
@@ -20,21 +20,20 @@ Visão simplificada:
 │               React                 │
 │                                     │
 │  Menu │ HUD │ Result │ History      │
-│              │                      │
-│           Ranking                   │
+│                                     │
+│  Ranking │ Options                  │
 └──────────────┬──────────────────────┘
                │
-        ┌──────▼──────┐
-        │  PixiJS     │
-        │             │
-        │ Game Loop   │
-        │ Player      │
-        │ Enemies     │
-        │ Projectiles │
-        │ Obstacles   │
-        │ Collision   │
-        └──────────────┘
-
+       ┌───────▼────────┐
+       │     PixiJS     │
+       │                │
+       │   Game Loop    │
+       │   Player       │
+       │   Enemies      │
+       │   Projectiles  │
+       │   Obstacles    │
+       │   Collision    │
+       └────────────────┘
 
 React
   │
@@ -63,6 +62,7 @@ Responsabilidades:
 * Tela de resultado
 * Histórico
 * Ranking
+* Opções
 * Botões de navegação
 * HUD complementar
 * Fluxo de reinício
@@ -73,7 +73,7 @@ O React não controla diretamente cada atualização de posição das entidades 
 
 ## 3. PixiJS
 
-PixiJS é responsável pelo ambiente de renderização 2D.
+PixiJS é responsável pelo ambiente de renderização 2D e pelo gameplay.
 
 Responsabilidades:
 
@@ -113,7 +113,7 @@ A instância do PixiJS é criada quando uma partida é inicializada.
 Fluxo:
 
 ```text
-React monta o componente
+React monta a área do jogo
         │
         ▼
 Inicialização do PixiJS
@@ -134,18 +134,18 @@ Partida
 Finalização / retorno ao menu
         │
         ▼
-Destruição da instância
+Limpeza dos recursos
 ```
 
 O canvas é anexado ao elemento destinado ao jogo.
 
-Ao finalizar ou reiniciar uma partida, os recursos relacionados ao gameplay são removidos para evitar que múltiplos game loops permaneçam ativos simultaneamente.
+Ao finalizar ou reiniciar uma partida, os recursos relacionados ao gameplay são removidos para evitar múltiplas instâncias do jogo executando simultaneamente.
 
 ---
 
 ## 5. Game Loop
 
-O jogo utiliza o ticker do PixiJS para atualizar o estado visual continuamente.
+O jogo utiliza o ticker do PixiJS para atualizar o gameplay continuamente.
 
 A cada atualização são processados:
 
@@ -184,6 +184,7 @@ D / →       → girar para direita
 Espaço      → disparo frontal
 Q           → disparo lateral esquerdo
 E           → disparo lateral direito
+P           → pausar
 ```
 
 A movimentação considera a rotação atual da embarcação para determinar a direção de deslocamento.
@@ -196,7 +197,7 @@ Existem dois tipos principais de disparo.
 
 ### Disparo frontal
 
-Um único projétil é criado na direção frontal da embarcação.
+Um projétil é criado na direção frontal da embarcação.
 
 ```text
           ↑
@@ -207,7 +208,7 @@ Um único projétil é criado na direção frontal da embarcação.
 
 ### Disparos laterais
 
-Os comandos laterais criam três projéteis paralelos.
+Os comandos laterais criam múltiplos projéteis.
 
 ```text
 ●
@@ -263,8 +264,8 @@ Exemplos:
 
 * Jogador × inimigo → perda de vida
 * Jogador × projétil → perda de vida
-* Projétil × inimigo → inimigo destruído e aumento da pontuação
-* Jogador × obstáculo → bloqueio/impacto
+* Projétil × inimigo → dano/destruição e aumento da pontuação
+* Jogador × obstáculo → impacto/bloqueio
 
 ---
 
@@ -281,12 +282,12 @@ PLAYING
   ├──────────────┐
   │              │
   ▼              ▼
-PAUSED         GAME OVER
+PAUSED        GAME OVER
   │              │
   └──► PLAYING   ▼
               RESULT
-                 │
-                 ▼
+                │
+                ▼
                MENU
 ```
 
@@ -296,7 +297,7 @@ O estado da partida controla o comportamento da interface e do gameplay.
 
 ## 11. Pausa
 
-A partida pode ser pausada manualmente.
+A partida pode ser pausada manualmente utilizando `P`.
 
 Também existe tratamento para perda de foco da janela.
 
@@ -309,13 +310,13 @@ PLAYING
 PAUSED
 ```
 
-Isso evita que o jogador continue recebendo dano ou que os elementos continuem avançando enquanto a aplicação não está em primeiro plano.
+Isso evita que o gameplay continue avançando enquanto a aplicação não está em primeiro plano.
 
 ---
 
 ## 12. Temporizador
 
-A partida possui duração limitada.
+A partida possui duração configurável.
 
 O temporizador é atualizado durante o estado `PLAYING`.
 
@@ -334,58 +335,117 @@ GAME OVER
 RESULT
 ```
 
+A duração da partida pode ser configurada na tela de opções.
+
 ---
 
-## 13. Pontuação
+## 13. Configuração da partida
 
-A pontuação é incrementada quando um inimigo é destruído.
+As configurações relacionadas ao gameplay são centralizadas em:
+
+```text
+src/config/gameConfig.ts
+```
+
+O tipo `GameConfig` define os parâmetros utilizados pelo jogo.
+
+Entre eles estão:
+
+* Duração da sessão
+* Intervalo de surgimento dos inimigos
+* Velocidade do jogador
+* Velocidade de rotação
+* Vida do jogador
+* Velocidade e dano dos projéteis
+* Configurações dos inimigos
+* Configurações dos projéteis inimigos
+
+A configuração padrão é definida por `defaultGameConfig`.
+
+As opções modificáveis pela interface são persistidas localmente.
+
+---
+
+## 14. Pontuação
+
+A pontuação é incrementada quando inimigos são destruídos.
+
+Fluxo:
 
 ```text
 Enemy destroyed
        │
        ▼
-Score + 1
+Score updated
+       │
+       ▼
+Result
 ```
 
-Ao finalizar a partida, o resultado é salvo no histórico local.
+Ao finalizar a partida, o resultado é enviado para o fluxo de histórico.
+
+Pontuações maiores que zero também podem ser enviadas para o ranking.
 
 ---
 
-## 14. Persistência local
+## 15. Histórico de partidas
 
-O histórico das partidas utiliza `localStorage`.
+O histórico é acessado através da camada de API:
+
+```text
+src/api/history.ts
+```
+
+O componente utiliza o hook:
+
+```text
+src/hooks/useHistory.ts
+```
 
 Fluxo:
 
 ```text
-Partida finalizada
+History Component
        │
        ▼
-Resultado da partida
+useHistory()
        │
        ▼
-localStorage
+TanStack Query
        │
        ▼
-Histórico
+getHistory()
+       │
+       ▼
+Axios
+       │
+       ▼
+MSW
 ```
 
-Isso permite recuperar resultados após recarregar a aplicação.
+Cada resultado contém informações como:
+
+* Jogador
+* Pontuação
+* Duração
+* Motivo do encerramento
+* Data
+
+O histórico também possui paginação.
 
 ---
 
-## 15. Ranking
+## 16. Ranking
 
 O ranking foi separado da lógica de gameplay.
 
-A camada de API possui as funções responsáveis pela comunicação:
+A camada de API possui:
 
 ```text
-src/api/api.ts
 src/api/ranking.ts
 ```
 
-O acesso aos dados pelo React é realizado através do hook:
+O acesso aos dados pelo React é realizado através de:
 
 ```text
 src/hooks/useRanking.ts
@@ -412,47 +472,56 @@ Axios
 MSW
 ```
 
+O ranking possui paginação e ordenação por pontuação.
+
 Essa separação permite substituir posteriormente o mock por um backend real com poucas alterações na camada de apresentação.
 
 ---
 
-## 16. TanStack Query
+## 17. TanStack Query
 
-TanStack Query é utilizado para controlar o estado assíncrono do ranking.
+TanStack Query é utilizado para controlar o estado assíncrono relacionado ao ranking e ao histórico.
 
 Responsabilidades:
 
 * Buscar dados
 * Controlar estado de carregamento
 * Controlar erros
-* Armazenar dados em cache
+* Gerenciar cache
+* Invalidar consultas após alterações
 * Reutilizar resultados de consultas
 
-O componente `Ranking` não precisa conhecer os detalhes da implementação HTTP.
+Os componentes não precisam conhecer os detalhes da implementação HTTP.
 
-Ele apenas utiliza:
+Eles utilizam os hooks:
 
 ```text
 useRanking()
+useHistory()
 ```
 
 ---
 
-## 17. Axios
+## 18. Axios
 
-O Axios é centralizado em:
+A configuração central do Axios está localizada em:
 
 ```text
-src/api/api.ts
+src/api/http.ts
 ```
 
-Isso permite manter a configuração HTTP em um único ponto.
+As operações específicas são separadas em módulos:
 
-A camada específica do ranking utiliza essa instância para realizar as requisições.
+```text
+src/api/ranking.ts
+src/api/history.ts
+```
+
+Essa organização evita concentrar toda a comunicação HTTP em um único arquivo e facilita a substituição futura do mock por um backend real.
 
 ---
 
-## 18. MSW
+## 19. MSW
 
 O Mock Service Worker é utilizado para simular as respostas da API.
 
@@ -462,54 +531,91 @@ Os handlers estão localizados em:
 src/mocks/handlers.ts
 ```
 
-Atualmente são simuladas operações relacionadas ao ranking:
+Atualmente são simuladas operações relacionadas ao ranking e histórico:
 
 ```text
-GET /ranking
-POST /ranking
+GET  /api/ranking
+POST /api/ranking
+
+GET  /api/history
+POST /api/history
 ```
 
-O objetivo é permitir o desenvolvimento e teste do frontend sem depender de um backend externo.
+Também existe um cenário de erro HTTP 500 para o endpoint de ranking.
+
+O MSW permite desenvolver e testar o frontend sem depender de um backend externo.
 
 ---
 
-## 19. Testes E2E
+## 20. Testes E2E
 
 Os testes End-to-End são implementados com Playwright.
 
-Localização:
+A configuração está localizada em:
 
 ```text
-src/testes/game.spec.ts
+playwright.config.ts
 ```
 
-Os testes atuais verificam:
+Os testes ficam em:
 
 ```text
-Abrir aplicação
-      │
-      ▼
-Verificar título
-      │
-      ▼
-Verificar botão JOGAR
-      │
-      ▼
-Clicar em JOGAR
-      │
-      ▼
-Verificar inicialização da partida
+tests/
+├── api-error.spec.ts
+├── main-menu.spec.ts
+├── options.spec.ts
+└── visual.spec.ts
 ```
+
+Os testes verificam atualmente:
+
+* Carregamento da aplicação
+* Exibição do menu principal
+* Exibição dos principais botões
+* Inicialização de uma partida
+* Abertura das opções
+* Abertura do ranking
+* Abertura do histórico
+* Persistência das opções após recarregar a página
+* Simulação de erro HTTP 500
+* Regressão visual do menu principal
 
 Resultado atual:
 
 ```text
-2 passed
+8 passed
 ```
 
 ---
 
-## 20. Separação de responsabilidades
+## 21. Regressão visual
+
+O projeto possui um teste de snapshot visual utilizando Playwright.
+
+O teste está localizado em:
+
+```text
+tests/visual.spec.ts
+```
+
+O snapshot atual está em:
+
+```text
+tests/visual.spec.ts-snapshots/
+└── main-menu-chromium-win32.png
+```
+
+O objetivo é detectar alterações visuais inesperadas no menu principal.
+
+Os snapshots podem ser atualizados utilizando:
+
+```bash
+npm run test:e2e:update
+```
+
+---
+
+## 22. Separação de responsabilidades
 
 A aplicação procura manter as seguintes responsabilidades separadas:
 
@@ -520,14 +626,14 @@ A aplicação procura manter as seguintes responsabilidades separadas:
 | TanStack Query | Estado assíncrono              |
 | Axios          | Comunicação HTTP               |
 | MSW            | Mock da API                    |
-| localStorage   | Persistência local             |
-| Playwright     | Testes E2E                     |
+| localStorage   | Persistência de configurações  |
+| Playwright     | Testes E2E e regressão visual  |
 
 Essa divisão reduz o acoplamento entre interface, gameplay e comunicação externa.
 
 ---
 
-## 21. Performance
+## 23. Performance
 
 Como o gameplay utiliza renderização em tempo real, alguns cuidados foram considerados:
 
@@ -535,13 +641,13 @@ Como o gameplay utiliza renderização em tempo real, alguns cuidados foram cons
 * Remoção de projéteis que deixam de ser necessários
 * Evitar múltiplos loops simultâneos
 * Separação entre React e atualização contínua do gameplay
-* Reutilização da estrutura de comunicação de dados através do TanStack Query
+* Limpeza dos recursos do PixiJS ao finalizar a partida
 
 A interface React não precisa ser renderizada novamente a cada frame do jogo.
 
 ---
 
-## 22. Possível evolução
+## 24. Possível evolução
 
 A arquitetura permite futuras melhorias, como:
 
@@ -550,10 +656,11 @@ A arquitetura permite futuras melhorias, como:
 * Novos tipos de inimigos
 * Novos tipos de armas
 * Sistema de power-ups
-* Backend real para ranking
+* Backend real para ranking e histórico
 * Autenticação
 * WebSockets para partidas multiplayer
 * Sistema mais completo de assets
 * Cobertura maior de testes automatizados
+* Estratégias mais robustas para persistência e sincronização de resultados
 
 A estrutura atual foi mantida simples para priorizar clareza, funcionamento e separação das principais responsabilidades do desafio técnico.
