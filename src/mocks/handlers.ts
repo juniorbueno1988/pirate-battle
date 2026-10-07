@@ -41,6 +41,13 @@ export const handlers = [
   http.get("/api/ranking", ({ request }) => {
     const url = new URL(request.url);
 
+    if (url.searchParams.get("error") === "true") {
+      return HttpResponse.json(
+        { message: "Erro simulado ao carregar o ranking" },
+        { status: 500 },
+      );
+    }
+
     const page = Number(url.searchParams.get("page") ?? "1");
     const pageSize = Number(url.searchParams.get("pageSize") ?? "5");
 
